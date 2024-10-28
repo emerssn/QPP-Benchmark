@@ -38,6 +38,43 @@ def perform_retrieval(index, queries_df, dataset, method='BM25'):  # {{ edit_1 }
     else:
         raise ValueError(f"Unknown retrieval method: {method}")
 
+def perform_rm3_retrieval(
+    index,
+    queries_df: pd.DataFrame,
+    dataset,
+    fb_terms: int = 10,
+    fb_docs: int = 10,
+    original_weight: float = 0.5,
+    num_results: int = 1000
+) -> pd.DataFrame:
+    """
+    Performs retrieval using the RM3 (Relevance Model 3) method.
+    """
+    # Create simple RM3 pipeline
+    bm25 = pt.BatchRetrieve(index, wmodel="BM25")
+    rm3_pipe = bm25 >> pt.rewrite.RM3(index) >> bm25 >> pt.text.get_text(dataset, "text")
+    
+    # Perform retrieval
+    results = rm3_pipe.transform(queries_df)
+    
+    # Clean and format results
+    results = results.rename(columns={
+        'score': 'docScore',
+        'docid': 'docno' if 'docno' not in results.columns else 'docno'
+    })
+    
+    # Add rank if not present
+    if 'rank' not in results.columns:
+        results['rank'] = results.groupby('qid').cumcount() + 1
+    
+    # Ensure we only return num_results per query
+    results = results.groupby('qid').head(num_results)
+    
+    # Sort by qid and rank
+    results = results.sort_values(['qid', 'rank'])
+    
+    return results
+
 def get_batch_scores(
     dataset,
     queries_df: pd.DataFrame,
@@ -48,23 +85,6 @@ def get_batch_scores(
 ) -> pd.DataFrame:
     """
     Get retrieval scores for multiple queries using PyTerrier
-
-    Parameters:
-    -----------
-    queries_df: pd.DataFrame
-        DataFrame containing queries with columns 'qid' and 'query'
-    index: Union[pt.Index, str]
-        PyTerrier index or path to index
-    method: str
-        Retrieval method ('BM25', 'TF_IDF', 'DirichletLM', 'PL2')
-    num_results: int
-        Number of results per query
-    controls: Dict
-        Optional parameter controls for the retrieval model
-
-    Returns:
-    --------
-    pd.DataFrame: Results with columns ['qid', 'docno', 'docScore', 'rank']
     """
     # Convert string path to index if needed
     if isinstance(index, str):
@@ -76,12 +96,17 @@ def get_batch_scores(
             'BM25': {'k1': 1.2, 'b': 0.75},
             'DirichletLM': {'mu': 2500},
             'TF_IDF': {},
-            'PL2': {'c': 1.0}
+            'PL2': {'c': 1.0},
+            'RM3': {
+                'fb_terms': 10,
+                'fb_docs': 10,
+                'original_weight': 0.5
+            }
         }
     
     # Initialize retrieval model based on method
     if method == 'BM25':
-        retriever = pt.terrier.Retriever(
+        retriever = pt.BatchRetrieve(
             index, 
             wmodel='BM25',
             controls=controls.get('BM25', {}),
@@ -99,6 +124,15 @@ def get_batch_scores(
             index, 
             wmodel='DirichletLM',
             controls=controls.get('DirichletLM', {}),
+            num_results=num_results
+        )
+    elif method == 'RM3':
+        # Use the new RM3 function
+        return perform_rm3_retrieval(
+            index,
+            queries_df,
+            dataset,
+            **controls.get('RM3', {}),
             num_results=num_results
         )
     else:

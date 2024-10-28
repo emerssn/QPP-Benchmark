@@ -12,6 +12,7 @@ from EvaluacionQPP.metodos.post_retrieval.wig import WIG
 from EvaluacionQPP.metodos.post_retrieval.clarity import Clarity
 from EvaluacionQPP.retrieval.retrieval import get_batch_scores
 from EvaluacionQPP.utils.text_processing import preprocess_text
+from EvaluacionQPP.metodos.post_retrieval.uef import UEF
 
 import os
 import shutil
@@ -89,7 +90,13 @@ def main():
 
     
 
-    # Perform retrieval using the get_batch_scores function
+    # Process queries
+
+    processed_queries = {qid: preprocess_text(query_text) for qid, query_text in queries.items()}
+
+    
+
+    # Get original BM25 results
     retrieval_results = get_batch_scores(
         queries_df=queries_df,
         index=index,
@@ -97,110 +104,55 @@ def main():
         method='BM25',
         num_results=1000,
         controls={
-            'BM25': {'k1': 1.5, 'b': 0.8},
-            'TF_IDF': {},
-            'DirichletLM': {'mu': 2000},
-            'PL2': {'c': 1.2}
+            'BM25': {'k1': 1.5, 'b': 0.8}
         }
-    ) 
+    )
 
-    
+    # Get RM3 re-ranked results
+    rm_results_df = get_batch_scores(
+        queries_df=queries_df,
+        index=index,
+        dataset=dataset_processor.dataset,
+        method='RM3',
+        num_results=1000,
+        controls={
+            'RM3': {
+                'fb_terms': 10,
+                'fb_docs': 10,
+                'original_weight': 0.5
+            }
+        }
+    )
 
-    # Debug: Print retrieval results columns
-
-    print(f"Retrieval Results Columns: {retrieval_results.columns.tolist()}")
-
-    
-
-    # Optional: Inspect the first few retrieval results
-
-    print(retrieval_results.head())
-
-    
-
-    # Initialize NQC with retrieval results
-
+    # Initialize predictors
     nqc = NQC(index_builder, retrieval_results)
-
-
+    wig = WIG(index_builder, retrieval_results)
     clarity = Clarity(index_builder, retrieval_results)
+    uef = UEF(index_builder, retrieval_results, rm_results_df)
 
-    # Prepare a dictionary of processed queries for batch scoring
-
-    processed_queries = {qid: preprocess_text(query_text) for qid, query_text in queries.items()}
-
-    # Compute NQC scores in batch
-
+    # Compute predictor scores
     nqc_scores = nqc.compute_scores_batch(processed_queries, list_size_param=10)
-    
-    # Compute Clarity scores in batch
+    wig_scores = wig.compute_scores_batch(processed_queries, list_size_param=10)
     clarity_scores = clarity.compute_scores_batch(processed_queries)
 
-    # Initialize WIG with retrieval results
+    # Compute UEF scores
+    uef_wig_scores = uef.compute_scores_batch(processed_queries, wig_scores)
+    uef_nqc_scores = uef.compute_scores_batch(processed_queries, nqc_scores)
 
-    wig = WIG(index_builder, retrieval_results)
-
-    # Compute WIG scores in batch
-
-    wig_scores = wig.compute_scores_batch(processed_queries, list_size_param=10)
-
-    # Compute and print IDF scores, NQC scores, WIG scores, and Clarity scores for each query
-
+    # Print all scores
     for query_id in queries.keys():
-
-        query_text = queries[query_id]
-
-        processed_query = processed_queries[query_id]
-
-        try:
-
-            if not processed_query:
-
-                print(f"\nQuery ID: {query_id} has no valid terms after preprocessing.")
-
-                print("-" * 50)
-
-                continue
-
-
-
-            max_idf_score = idf.compute_score(query_text, method='max')
-
-            avg_idf_score = idf.compute_score(query_text, method='avg')
-
-            nqc_score = nqc_scores.get(query_id, 0.0)
-
-            wig_score = wig_scores.get(query_id, 0.0)
-
-            clarity_score = clarity_scores.get(query_id, 0.0)
-
-            print(f"\nQuery ID: {query_id}")
-
-            print(f"Query: {query_text}")
-
-            print(f"Processed Query Terms: {processed_query}")
-
-            print(f"Max IDF Score: {max_idf_score:.4f}")
-
-            print(f"Avg IDF Score: {avg_idf_score:.4f}")
-
-            print(f"NQC Score: {nqc_score:.4f}")
-
-            print(f"WIG Score: {wig_score:.4f}")
-
-            print(f"Clarity Score: {clarity_score:.4f}")
-
-            print("-" * 50)
-
-        except Exception as e:
-
-            print(f"Error processing query {query_id}: {e}")
-
+        print(f"\nQuery ID: {query_id}")
+        print(f"Query: {queries[query_id]}")
+        print(f"NQC Score: {nqc_scores.get(query_id, 0.0):.4f}")
+        print(f"WIG Score: {wig_scores.get(query_id, 0.0):.4f}")
+        print(f"Clarity Score: {clarity_scores.get(query_id, 0.0):.4f}")
+        print(f"UEF-WIG Score: {uef_wig_scores.get(query_id, 0.0):.4f}")
+        print(f"UEF-NQC Score: {uef_nqc_scores.get(query_id, 0.0):.4f}")
+        print("-" * 50)
 
 if __name__ == "__main__":
 
     main()
-
 
 
 
