@@ -12,8 +12,8 @@ Evaluación comparativa (benchmark) de métodos Query Performance Prediction (QP
      - [x] Explorar los procesos estándar de evaluación: ir_datasets, ir_measures y PyTerrier
      - [x] Determinar los datasets a utilizar (ir_datasets): BEIR, Cranfield, MS MARCO, Antique y CAR
      - [x] Configurar el entorno experimental
-- [ ] Implementar métodos QPP en búsquedas Ad-hoc sin inteligencia artificial para su evaluación utilizando métricas estandarizadas
+- [x] Implementar métodos QPP en búsquedas Ad-hoc sin inteligencia artificial para su evaluación utilizando métricas estandarizadas
      - [x] Implementación de método pre-retrieval: IDF
-     - [ ] Implementación de métodos post-retrieval: Clarity, WIG, NQC y UEF.
+     - [x] Implementación de métodos post-retrieval: Clarity, WIG, NQC y UEF.
 - [ ] Evaluar los resultados obtenidos de los métodos QPP implementados, determinando su efectividad en función a los resultados descritos en el estado del arte
 - [ ] Analizar y documentar el rendimiento de los métodos QPP implementados para establecer una línea base para futuras comparaciones con nuevos enfoques
