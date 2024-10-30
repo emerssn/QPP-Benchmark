@@ -33,18 +33,9 @@ class IndexBuilder:
                 prev_doc = next(iterator)
             except StopIteration:
                 return
+            
             for doc_id, doc_text in iterator:
                 processed_text = preprocess_text(doc_text)
-                
-                # Update term document frequency
-                for term in set(processed_text):
-                    self.term_df[term] = self.term_df.get(term, 0) + 1
-                
-                # Update term collection frequency
-                for term in processed_text:
-                    self.term_cf[term] = self.term_cf.get(term, 0) + 1
-                    self.total_terms += 1  # Track total terms
-                
                 self.total_docs += 1
                 
                 yield {
@@ -54,21 +45,13 @@ class IndexBuilder:
                 
                 prev_doc = (doc_id, doc_text)
 
-            # Handle last document without adding global stats
+            # Handle last document
             processed_text = preprocess_text(prev_doc[1])
-            
-            for term in set(processed_text):
-                self.term_df[term] = self.term_df.get(term, 0) + 1
-            
-            for term in processed_text:
-                self.term_cf[term] = self.term_cf.get(term, 0) + 1
-            
             self.total_docs += 1
             
             yield {
                 'docno': prev_doc[0],
                 'text': ' '.join(processed_text),
-                # Removed global stats from metadata
             }
 
         # Index the documents
@@ -76,8 +59,24 @@ class IndexBuilder:
         index = pt.IndexFactory.of(index_ref)
         self.index = index
         
-        # No need to verify global metadata since they're not stored in documents
+        # Load statistics from Terrier's index after indexing is complete
+        self._load_statistics_from_index()
+        
         return index
+
+    def _load_statistics_from_index(self):
+        """Load term statistics directly from Terrier's index"""
+        self.term_df = {}
+        self.term_cf = {}
+        self.total_docs = self.index.getCollectionStatistics().getNumberOfDocuments()
+        self.total_terms = self.index.getCollectionStatistics().getNumberOfTokens()
+        
+        # Load term statistics from Terrier's lexicon
+        lexicon = self.index.getLexicon()
+        for entry in lexicon:
+            term = entry.getKey()
+            self.term_df[term] = entry.getValue().getDocumentFrequency()
+            self.term_cf[term] = entry.getValue().getFrequency()
 
     def load_or_build_index(self, index_path):
         if os.path.exists(index_path) and os.listdir(index_path):

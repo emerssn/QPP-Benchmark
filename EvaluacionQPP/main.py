@@ -1,4 +1,5 @@
 import nltk
+nltk.download('punkt')
 nltk.download('stopwords')
 nltk.download('punkt_tab')
 
@@ -27,7 +28,7 @@ def main():
 
     if not pt.started():
 
-        pt.init()
+        pt.init(boot_packages=["com.github.terrierteam:terrier-prf:-SNAPSHOT"])
 
     
 
@@ -62,6 +63,7 @@ def main():
     idf = IDF(index)
     
 
+
     # Get queries
 
     try:
@@ -88,7 +90,10 @@ def main():
 
     queries_df = pd.DataFrame(list(queries.items()), columns=['qid', 'query'])
 
-    
+
+    # Compute IDF scores (both max and avg)
+    idf_scores_avg = idf.compute_scores_batch(queries, method='avg')
+    idf_scores_max = idf.compute_scores_batch(queries, method='max')
 
     # Process queries
 
@@ -143,6 +148,8 @@ def main():
     for query_id in queries.keys():
         print(f"\nQuery ID: {query_id}")
         print(f"Query: {queries[query_id]}")
+        print(f"IDF Score (avg): {idf_scores_avg.get(query_id, 0.0):.4f}")
+        print(f"IDF Score (max): {idf_scores_max.get(query_id, 0.0):.4f}")
         print(f"NQC Score: {nqc_scores.get(query_id, 0.0):.4f}")
         print(f"WIG Score: {wig_scores.get(query_id, 0.0):.4f}")
         print(f"Clarity Score: {clarity_scores.get(query_id, 0.0):.4f}")

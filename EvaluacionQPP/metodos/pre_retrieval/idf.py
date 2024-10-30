@@ -52,3 +52,20 @@ class IDF(PreRetrievalMethod):
         Cronen-Townsend, S. et al. 2002. Predicting query performance.
         """
         return np.mean(idfs) if idfs else 0.0
+
+    def compute_scores_batch(self, queries_dict=None, method='avg'):
+        """
+        Computes IDF scores for multiple queries in batch.
+
+        Args:
+            queries_dict (dict): Optional mapping from query_id to query text.
+                                   If None, uses the default queries from the dataset.
+            method (str): The IDF calculation method ('max' or 'avg').
+
+        Returns:
+            dict: Mapping from query_id to its corresponding IDF score.
+        """
+        scores_dict = {}
+        for query_id, query_text in queries_dict.items():
+            scores_dict[query_id] = self.compute_score(query_text, method=method)
+        return scores_dict
