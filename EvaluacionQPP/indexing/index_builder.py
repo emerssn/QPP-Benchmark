@@ -11,18 +11,21 @@ class IndexBuilder:
         self.term_df = {}
         self.term_cf = {}
         self.index = None 
-        self.total_terms = 0 
+        self.total_terms = 0
+        # Extract dataset name from the dataset object for index management
+        self.dataset_name = dataset.dataset.dataset_id.replace(':', '_').replace('/', '_')
 
-    def build_index(self, index_path):
-        # Ensure the directory exists
-        os.makedirs(index_path, exist_ok=True)
+    def build_index(self, base_index_path):
+        # Create dataset-specific index directory
+        dataset_index_path = os.path.join(base_index_path, self.dataset_name)
+        os.makedirs(dataset_index_path, exist_ok=True)
         
         # Ensure PyTerrier is initialized
         if not pt.started():
             pt.init()
 
         # Create an indexer with only 'docno' and 'text' as metadata
-        indexer = pt.IterDictIndexer(index_path)
+        indexer = pt.IterDictIndexer(dataset_index_path)
         indexer.setProperty("terrier.index.meta.forward.keys", "docno,text")
         indexer.setProperty("terrier.index.meta.forward.keylens", "20,100000")
 
@@ -78,11 +81,16 @@ class IndexBuilder:
             self.term_df[term] = entry.getValue().getDocumentFrequency()
             self.term_cf[term] = entry.getValue().getFrequency()
 
-    def load_or_build_index(self, index_path):
-        if os.path.exists(index_path) and os.listdir(index_path):
-            print("Index directory exists and is not empty. Attempting to load existing index.")
+    def load_or_build_index(self, base_index_path):
+        # Create dataset-specific index directory path
+        dataset_index_path = os.path.join(base_index_path, self.dataset_name)
+        
+        print(f"Checking for index at: {dataset_index_path}")
+        
+        if os.path.exists(dataset_index_path) and os.listdir(dataset_index_path):
+            print(f"Found existing index for dataset {self.dataset_name}. Attempting to load...")
             try:
-                index = pt.IndexFactory.of(index_path)
+                index = pt.IndexFactory.of(dataset_index_path)
                 self.index = index
 
                 # Access global statistics directly from the index
@@ -96,23 +104,24 @@ class IndexBuilder:
                     self.term_df[term] = entry.getValue().getDocumentFrequency()
                     self.term_cf[term] = entry.getValue().getFrequency()
 
+                print(f"Successfully loaded existing index for {self.dataset_name}")
                 print(f"Loaded total_docs: {self.total_docs}")
                 print(f"Loaded total_tokens: {self.total_terms}")
-                print(f"Loaded term_df with {len(self.term_df)} terms.")
-                print(f"Loaded term_cf with {len(self.term_cf)} terms.")
+                print(f"Loaded term_df with {len(self.term_df)} terms")
+                print(f"Loaded term_cf with {len(self.term_cf)} terms")
 
-                print("Successfully loaded existing index.")
             except Exception as e:
                 print(f"Error loading existing index: {e}")
-                print("Deleting existing index and creating a new one.")
-                shutil.rmtree(index_path)
-                index = self.build_index(index_path)
+                print("Creating new index...")
+                shutil.rmtree(dataset_index_path)
+                index = self.build_index(base_index_path)
         else:
-            print("Index directory does not exist or is empty. Creating new index.")
-            if os.path.exists(index_path):
-                shutil.rmtree(index_path)
-            index = self.build_index(index_path)
+            print(f"No existing index found for dataset {self.dataset_name}. Creating new index...")
+            if os.path.exists(dataset_index_path):
+                shutil.rmtree(dataset_index_path)
+            index = self.build_index(base_index_path)
         
+        print(f"Index statistics for {self.dataset_name}:")
         print(f"Total documents indexed: {index.getCollectionStatistics().getNumberOfDocuments()}")
         print(f"Unique terms: {index.getCollectionStatistics().getNumberOfUniqueTerms()}")
         return index
@@ -139,15 +148,20 @@ class IndexBuilder:
         term_cf = self.term_cf.get(term, 0)
         return term_cf / self.total_terms if self.total_terms > 0 else 0.0
 
-    def save_sample_frequencies_to_json(self, file_path, num_samples=100):
+    def save_sample_frequencies_to_json(self, base_file_path, num_samples=100):
         """
-        Save a sample of term_df and term_cf to a JSON file.
+        Save a sample of term_df and term_cf to a JSON file with dataset-specific naming.
         """
+        # Create dataset-specific filename
+        filename = f"sample_term_frequencies_{self.dataset_name}.json"
+        file_path = os.path.join(os.path.dirname(base_file_path), filename)
+        
         sample_terms = list(self.term_df.keys())[:num_samples]
         sample_data = {
+            "dataset": self.dataset_name,
             "term_df": {term: self.term_df[term] for term in sample_terms},
             "term_cf": {term: self.term_cf[term] for term in sample_terms}
         }
         with open(file_path, 'w') as f:
             json.dump(sample_data, f, indent=4)
-        print(f"Sample term frequencies saved to {file_path}")
+        print(f"Sample term frequencies for dataset {self.dataset_name} saved to {file_path}")
