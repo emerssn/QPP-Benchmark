@@ -1,6 +1,5 @@
 from ..base import PreRetrievalMethod
 import numpy as np
-from ...utils.text_processing import preprocess_text
 import json
 
 class SCQ(PreRetrievalMethod):
@@ -21,19 +20,18 @@ class SCQ(PreRetrievalMethod):
             self.term_df = {}
             self.term_cf = {}
 
-    def compute_score(self, query, method='avg', **kwargs):
+    def compute_score(self, query_terms, method='avg', **kwargs):
         """
         Computes SCQ score for a query using specified method.
         
         Args:
-            query (str): The query text
+            query_terms (list): List of preprocessed query terms
             method (str): The SCQ calculation method ('max', 'avg', or 'sum')
             
         Returns:
             float: The SCQ score
         """
-        terms = preprocess_text(query)
-        raw_scq_scores = self._calc_raw_scq(terms)
+        raw_scq_scores = self._calc_raw_scq(query_terms)
         
         if method == 'max':
             return self.calc_max_scq(raw_scq_scores)
@@ -77,21 +75,15 @@ class SCQ(PreRetrievalMethod):
         return np.array(raw_scores)
 
     def calc_scq(self, raw_scores):
-        """
-        Calculates sum SCQ score.
-        """
+        """Calculates sum SCQ score."""
         return np.sum(raw_scores)
 
     def calc_max_scq(self, raw_scores):
-        """
-        Calculates maximum SCQ score.
-        """
+        """Calculates maximum SCQ score."""
         return np.max(raw_scores) if len(raw_scores) > 0 else 0.0
 
     def calc_avg_scq(self, raw_scores):
-        """
-        Calculates average SCQ score (NSCQ in the original paper).
-        """
+        """Calculates average SCQ score (NSCQ in the original paper)."""
         return np.mean(raw_scores) if len(raw_scores) > 0 else 0.0
 
     def compute_scores_batch(self, queries_dict=None, method='avg'):
@@ -99,14 +91,13 @@ class SCQ(PreRetrievalMethod):
         Computes SCQ scores for multiple queries in batch.
 
         Args:
-            queries_dict (dict): Optional mapping from query_id to query text.
-                               If None, uses the default queries from the dataset.
-            method (str): The SCQ calculation method ('max', 'avg', or 'sum').
+            queries_dict (dict): Mapping from query_id to preprocessed query terms
+            method (str): The SCQ calculation method ('max', 'avg', or 'sum')
 
         Returns:
-            dict: Mapping from query_id to its corresponding SCQ score.
+            dict: Mapping from query_id to its corresponding SCQ score
         """
         scores_dict = {}
-        for query_id, query_text in queries_dict.items():
-            scores_dict[query_id] = self.compute_score(query_text, method=method)
+        for query_id, query_terms in queries_dict.items():
+            scores_dict[query_id] = self.compute_score(query_terms, method=method)
         return scores_dict

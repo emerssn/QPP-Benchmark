@@ -53,7 +53,16 @@ def perform_rm3_retrieval(
     """
     # Create simple RM3 pipeline
     bm25 = pt.BatchRetrieve(index, wmodel="BM25")
-    rm3_pipe = bm25 >> pt.rewrite.RM3(index) >> bm25 >> pt.text.get_text(dataset, "text")
+    rm3_pipe = bm25 >> pt.rewrite.RM3(index) >> bm25
+    
+    # Add text based on dataset type
+    if isinstance(dataset, IquiqueDataset):
+        def add_text(res):
+            res['text'] = res['docno'].map(dataset.documents)
+            return res
+        rm3_pipe = rm3_pipe >> add_text
+    else:
+        rm3_pipe = rm3_pipe >> pt.text.get_text(dataset, "text")
     
     # Perform retrieval
     results = rm3_pipe.transform(queries_df)

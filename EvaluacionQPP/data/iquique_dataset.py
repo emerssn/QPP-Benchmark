@@ -62,10 +62,18 @@ class IquiqueDataset:
         """Devuelve una URL que proporciona más información sobre este conjunto de datos"""
         return None
 
-    def text_loader(self) -> Dict[str, str]:
+    def text_loader(self, metadata=None, verbose=False, **kwargs) -> Dict[str, str]:
         """
         Método requerido por PyTerrier para cargar el texto de los documentos.
+        
+        Args:
+            metadata: Metadatos adicionales (no usado en este caso)
+            verbose: Flag para mostrar información adicional
+            **kwargs: Argumentos adicionales que PyTerrier podría pasar
+            
         Returns:
             Dict[str, str]: Diccionario que mapea docno a texto del documento
         """
+        if verbose:
+            print("Loading text from IquiqueDataset...")
         return self.documents

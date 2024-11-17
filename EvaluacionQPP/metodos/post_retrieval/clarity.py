@@ -6,10 +6,11 @@ from EvaluacionQPP.utils.text_processing import preprocess_text
 from ..base import PostRetrievalMethod
 
 class Clarity(PostRetrievalMethod):
-    def __init__(self, index_builder, retrieval_results, results_df=None):
+    def __init__(self, index_builder, retrieval_results, results_df=None, dataset_name=None):
         super().__init__(index_builder, retrieval_results, results_df)
         self.index = index_builder
         self.vocabulary = index_builder.get_vocabulary()
+        self.dataset_name = dataset_name
 
     def compute_scores_batch(self, processed_queries: Dict[str, list], top_k: int = 1000) -> Dict[str, float]:
         """
@@ -46,7 +47,7 @@ class Clarity(PostRetrievalMethod):
         # Compute term frequencies in top-k documents
         topk_term_freq = {}
         for text in topk_docs['text']:
-            terms = preprocess_text(text)
+            terms = preprocess_text(text, dataset_name=self.dataset_name)
             for term in terms:
                 topk_term_freq[term] = topk_term_freq.get(term, 0) + 1
 

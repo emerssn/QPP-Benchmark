@@ -7,14 +7,8 @@ import pandas as pd
 
 from EvaluacionQPP.data.dataset_processor import DatasetProcessor
 from EvaluacionQPP.indexing.index_builder import IndexBuilder
-from EvaluacionQPP.metodos.pre_retrieval.idf import IDF
-from EvaluacionQPP.metodos.post_retrieval.nqc import NQC
-from EvaluacionQPP.metodos.post_retrieval.wig import WIG
-from EvaluacionQPP.metodos.post_retrieval.clarity import Clarity
+from EvaluacionQPP.metodos.qpp_factory import QPPMethodFactory
 from EvaluacionQPP.retrieval.retrieval import get_batch_scores
-from EvaluacionQPP.utils.text_processing import preprocess_text
-from EvaluacionQPP.metodos.post_retrieval.uef import UEF
-from EvaluacionQPP.metodos.pre_retrieval.scq import SCQ
 
 nltk.download('punkt')
 nltk.download('stopwords')
@@ -50,15 +44,15 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     index_path = os.path.join(script_dir, "indices", safe_dataset_name)
     
+    # Build or load index
     index_builder = IndexBuilder(dataset_processor, safe_dataset_name)
     index = index_builder.load_or_build_index(index_path)
 
+    # Save term frequencies for analysis
     sample_file_path = os.path.join(script_dir, "sample_term_frequencies.json")
     index_builder.save_sample_frequencies_to_json(sample_file_path)
     
-    idf = IDF(index)
-    scq = SCQ(index)
-    
+    # Get queries
     try:
         queries = dataset_processor.get_queries()
         print(f"Total queries: {len(queries)}")
@@ -69,16 +63,10 @@ def main():
         print(f"Error getting queries: {e}")
         return
     
+    # Prepare queries DataFrame
     queries_df = pd.DataFrame(list(queries.items()), columns=['qid', 'query'])
     
-    idf_scores_avg = idf.compute_scores_batch(queries, method='avg')
-    idf_scores_max = idf.compute_scores_batch(queries, method='max')
-    
-    scq_scores_avg = scq.compute_scores_batch(queries, method='avg')
-    scq_scores_max = scq.compute_scores_batch(queries, method='max')
-    
-    processed_queries = {qid: preprocess_text(query_text) for qid, query_text in queries.items()}
-    
+    # Get retrieval results
     retrieval_results = get_batch_scores(
         queries_df=queries_df,
         index=index,
@@ -90,6 +78,7 @@ def main():
         }
     )
     
+    # Get RM3 results for UEF method
     rm_results_df = get_batch_scores(
         queries_df=queries_df,
         index=index,
@@ -105,30 +94,25 @@ def main():
         }
     )
     
-    nqc = NQC(index_builder, retrieval_results)
-    wig = WIG(index_builder, retrieval_results)
-    clarity = Clarity(index_builder, retrieval_results)
-    uef = UEF(index_builder, retrieval_results, rm_results_df)
+    # Create QPP factory and compute all scores
+    qpp_factory = QPPMethodFactory(
+        index_builder=index_builder,
+        retrieval_results=retrieval_results,
+        rm_results=rm_results_df,
+        dataset_name=dataset_name
+    )
     
-    nqc_scores = nqc.compute_scores_batch(processed_queries, list_size_param=10)
-    wig_scores = wig.compute_scores_batch(processed_queries, list_size_param=10)
-    clarity_scores = clarity.compute_scores_batch(processed_queries)
+    qpp_scores = qpp_factory.compute_all_scores(
+        queries,
+        list_size_param=10
+    )
     
-    uef_wig_scores = uef.compute_scores_batch(processed_queries, wig_scores)
-    uef_nqc_scores = uef.compute_scores_batch(processed_queries, nqc_scores)
-    
-    for query_id in queries.keys():
+    # Print results
+    for query_id, scores in qpp_scores.items():
         print(f"\nQuery ID: {query_id}")
         print(f"Query: {queries[query_id]}")
-        print(f"IDF Score (avg): {idf_scores_avg.get(query_id, 0.0):.4f}")
-        print(f"IDF Score (max): {idf_scores_max.get(query_id, 0.0):.4f}")
-        print(f"SCQ Score (avg): {scq_scores_avg.get(query_id, 0.0):.4f}")
-        print(f"SCQ Score (max): {scq_scores_max.get(query_id, 0.0):.4f}")
-        print(f"NQC Score: {nqc_scores.get(query_id, 0.0):.4f}")
-        print(f"WIG Score: {wig_scores.get(query_id, 0.0):.4f}")
-        print(f"Clarity Score: {clarity_scores.get(query_id, 0.0):.4f}")
-        print(f"UEF-WIG Score: {uef_wig_scores.get(query_id, 0.0):.4f}")
-        print(f"UEF-NQC Score: {uef_nqc_scores.get(query_id, 0.0):.4f}")
+        for method, score in scores.items():
+            print(f"{method.upper()} Score: {score:.4f}")
         print("-" * 50)
 
 if __name__ == "__main__":
