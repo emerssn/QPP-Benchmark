@@ -3,29 +3,28 @@ from ..utils.text_processing import preprocess_text
 import json
 import os
 import shutil
+import time
 
 class IndexBuilder:
-    def __init__(self, dataset):
+    def __init__(self, dataset, dataset_name):
         self.dataset = dataset
         self.total_docs = 0
         self.term_df = {}
         self.term_cf = {}
         self.index = None 
         self.total_terms = 0
-        # Extract dataset name from the dataset object for index management
-        self.dataset_name = dataset.dataset.dataset_id.replace(':', '_').replace('/', '_')
+        self.dataset_name = dataset_name
 
     def build_index(self, base_index_path):
-        # Create dataset-specific index directory
-        dataset_index_path = os.path.join(base_index_path, self.dataset_name)
-        os.makedirs(dataset_index_path, exist_ok=True)
+        # base_index_path already includes the dataset name, so don't add it again
+        os.makedirs(base_index_path, exist_ok=True)
         
         # Ensure PyTerrier is initialized
         if not pt.started():
             pt.init()
 
         # Create an indexer with only 'docno' and 'text' as metadata
-        indexer = pt.IterDictIndexer(dataset_index_path)
+        indexer = pt.IterDictIndexer(base_index_path)
         indexer.setProperty("terrier.index.meta.forward.keys", "docno,text")
         indexer.setProperty("terrier.index.meta.forward.keylens", "20,100000")
 
@@ -82,15 +81,13 @@ class IndexBuilder:
             self.term_cf[term] = entry.getValue().getFrequency()
 
     def load_or_build_index(self, base_index_path):
-        # Create dataset-specific index directory path
-        dataset_index_path = os.path.join(base_index_path, self.dataset_name)
+        # base_index_path already includes the dataset name, so use it directly
+        print(f"Checking for index at: {base_index_path}")
         
-        print(f"Checking for index at: {dataset_index_path}")
-        
-        if os.path.exists(dataset_index_path) and os.listdir(dataset_index_path):
+        if os.path.exists(base_index_path) and os.listdir(base_index_path):
             print(f"Found existing index for dataset {self.dataset_name}. Attempting to load...")
             try:
-                index = pt.IndexFactory.of(dataset_index_path)
+                index = pt.IndexFactory.of(base_index_path)
                 self.index = index
 
                 # Access global statistics directly from the index
@@ -113,12 +110,12 @@ class IndexBuilder:
             except Exception as e:
                 print(f"Error loading existing index: {e}")
                 print("Creating new index...")
-                shutil.rmtree(dataset_index_path)
+                shutil.rmtree(base_index_path)
                 index = self.build_index(base_index_path)
         else:
             print(f"No existing index found for dataset {self.dataset_name}. Creating new index...")
-            if os.path.exists(dataset_index_path):
-                shutil.rmtree(dataset_index_path)
+            if os.path.exists(base_index_path):
+                shutil.rmtree(base_index_path)
             index = self.build_index(base_index_path)
         
         print(f"Index statistics for {self.dataset_name}:")
