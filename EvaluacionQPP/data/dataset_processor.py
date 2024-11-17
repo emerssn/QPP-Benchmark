@@ -1,9 +1,23 @@
 import pyterrier as pt
 import pandas as pd
+from .iquique_dataset import IquiqueDataset
 
 class DatasetProcessor:
-    def __init__(self, dataset_name):
-        self.dataset = pt.get_dataset(dataset_name)
+    def __init__(self, dataset_name: str):
+        """
+        Initialize the dataset processor with the specified dataset.
+        
+        Args:
+            dataset_name (str): Name/identifier of the dataset to process
+        """
+        if dataset_name == "iquique_dataset":
+            self.dataset = IquiqueDataset()
+        elif dataset_name.startswith("irds:"):
+            if not pt.started():
+                pt.init()
+            self.dataset = pt.get_dataset(dataset_name)
+        else:
+            raise ValueError(f"Unknown dataset: {dataset_name}")
 
     def get_queries(self):
         topics = self.dataset.get_topics()
