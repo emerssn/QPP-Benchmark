@@ -1,6 +1,23 @@
 # QPP-Benchmark
 Evaluación comparativa (benchmark) de métodos Query Performance Prediction (QPP) para búsquedas Ad-hoc utilizando métricas de correlación.
 
+## Ejecución del Script
+
+Para ejecutar el script principal y realizar la evaluación de los métodos QPP, utilice el siguiente comando:
+
+```bash
+python -m EvaluacionQPP.main --dataset <nombre_del_dataset>
+```
+### Parámetros
+- - `--dataset`: Identificador del dataset a utilizar. Los datasets disponibles son:
+  - `antique_test`
+  - `iquique_small`
+
+Ejemplo de uso:
+```bash
+python -m EvaluacionQPP.main --dataset antique_test
+```
+
 # To-do
 
 ### Objetivos específicos
