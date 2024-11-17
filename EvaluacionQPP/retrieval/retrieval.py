@@ -7,6 +7,7 @@ from EvaluacionQPP.metodos.post_retrieval.nqc import NQC  # Ensure NQC is proper
 import os
 import shutil
 from typing import Union, Dict
+from EvaluacionQPP.data.iquique_dataset import IquiqueDataset
 
 def perform_retrieval(index, queries_df, dataset, method='BM25'):  # {{ edit_1 }}
     """
@@ -111,7 +112,16 @@ def get_batch_scores(
             wmodel='BM25',
             controls=controls.get('BM25', {}),
             num_results=num_results
-        ) >> pt.text.get_text(dataset, "text")
+        )
+        # Only add text getter if dataset is not our custom dataset
+        if not isinstance(dataset, IquiqueDataset):
+            retriever = retriever >> pt.text.get_text(dataset, "text")
+        else:
+            # For our custom dataset, add the text directly from the documents
+            def add_text(res):
+                res['text'] = res['docno'].map(dataset.documents)
+                return res
+            retriever = retriever >> add_text
     elif method == 'TF_IDF':
         retriever = pt.BatchRetrieve(
             index, 

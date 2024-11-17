@@ -60,4 +60,12 @@ class IquiqueDataset:
 
     def info_url(self) -> str:
         """Devuelve una URL que proporciona más información sobre este conjunto de datos"""
-        return None 
+        return None
+
+    def text_loader(self) -> Dict[str, str]:
+        """
+        Método requerido por PyTerrier para cargar el texto de los documentos.
+        Returns:
+            Dict[str, str]: Diccionario que mapea docno a texto del documento
+        """
+        return self.documents
