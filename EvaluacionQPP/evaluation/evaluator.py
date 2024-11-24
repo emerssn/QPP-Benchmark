@@ -21,7 +21,7 @@ DATASET_FORMATS = {
             'docno': 'doc_id',
             'docScore': 'score'
         },
-        "run_doc_id_transform": lambda x: x  # Changed from adding 'doc' prefix
+        "run_doc_id_transform": lambda x: x.replace('doc', '').split('_')[0]
     },
     "iquique_dataset": {
         "doc_id_transform": lambda x: x,  # Keep as is
@@ -58,49 +58,29 @@ def evaluate_results(
     qrels = qrels_df.loc[:, ~qrels_df.columns.duplicated()]
     run = results_df.loc[:, ~results_df.columns.duplicated()]
     
-    # Print initial statistics and sample data
-    print(f"\nInitial Statistics:")
-    print(f"Number of queries in qrels: {len(qrels['qid'].unique())}")
-    print(f"Number of queries in run: {len(run['qid'].unique())}")
-    print(f"Number of documents in qrels: {len(qrels['docno'].unique())}")
-    print(f"Number of documents in run: {len(run['docno'].unique())}")
-    
-    print("\nSample qrels before processing:")
-    print(qrels.head())
-    print("\nSample run before processing:")
-    print(run.head())
+    print("\nDEBUG: Initial column names:")
+    print("Qrels columns:", qrels.columns.tolist())
+    print("Run columns:", run.columns.tolist())
     
     # Prepare qrels and run data using dataset-specific column mappings
     qrels = qrels.rename(columns=dataset_config["qrels_columns"])
     run = run.rename(columns=dataset_config["run_columns"])
     
+    print("\nDEBUG: After column renaming:")
+    print("Qrels columns:", qrels.columns.tolist())
+    print("Run columns:", run.columns.tolist())
+    
     # Apply dataset-specific document ID transformation
-    qrels['doc_id'] = qrels['doc_id'].apply(dataset_config["doc_id_transform"])
-    run['doc_id'] = run['doc_id'].astype(str)
+    print("\nDEBUG: Before doc_id transformation:")
+    print("Sample qrels doc_ids:", qrels['doc_id'].head().tolist())
+    print("Sample run doc_ids:", run['doc_id'].head().tolist())
     
-    # Remove any remaining suffixes from qrels 'doc_id'
-    qrels['doc_id'] = qrels['doc_id'].str.split('_').str[0]
+    qrels['doc_id'] = qrels['doc_id'].astype(str).apply(dataset_config["doc_id_transform"])
+    run['doc_id'] = run['doc_id'].astype(str).apply(dataset_config["run_doc_id_transform"])
     
-    # Debugging: Check for any discrepancies in document IDs
-    print("\nChecking for discrepancies in document IDs:")
-    qrels_doc_ids = set(qrels['doc_id'].unique())
-    run_doc_ids = set(run['doc_id'].unique())
-    common_doc_ids = qrels_doc_ids.intersection(run_doc_ids)
-    print(f"Number of common document IDs: {len(common_doc_ids)}")
-    if len(common_doc_ids) == 0:
-        print("Warning: No common document IDs found between qrels and run.")
-        print("Qrels doc_id sample:", sorted(list(qrels_doc_ids))[:5])
-        print("Run doc_id sample:", sorted(list(run_doc_ids))[:5])
-    
-    print("\nSample qrels after doc_id transform:")
-    print(qrels.head())
-    print("\nSample run after doc_id transform:")
-    print(run.head())
-    
-    # Print unique document ID patterns for debugging
-    print("\nDocument ID Patterns:")
-    print("Qrels doc_id sample:", sorted(list(qrels['doc_id'].head()))[:5])
-    print("Run doc_id sample:", sorted(list(run['doc_id'].head()))[:5])
+    print("\nDEBUG: After doc_id transformation:")
+    print("Sample qrels doc_ids:", qrels['doc_id'].head().tolist())
+    print("Sample run doc_ids:", run['doc_id'].head().tolist())
     
     # Ensure correct data types
     qrels['query_id'] = qrels['query_id'].astype(str)
@@ -111,6 +91,23 @@ def evaluate_results(
     run['query_id'] = run['query_id'].astype(str)
     run['doc_id'] = run['doc_id'].astype(str)
     run['score'] = run['score'].astype(float)
+    
+    # Print sample of final dataframes
+    print("\nDEBUG: Final dataframes sample:")
+    print("\nQrels:")
+    print(qrels.head())
+    print("\nRun:")
+    print(run.head())
+    
+    # Check document overlap for each query
+    print("\nDEBUG: Document overlap check for each query:")
+    for qid in qrels['query_id'].unique():
+        qrels_docs = set(qrels[qrels['query_id'] == qid]['doc_id'])
+        run_docs = set(run[run['query_id'] == qid]['doc_id'])
+        #print(f"\nQuery {qid}:")
+        #print(f"Qrels docs: {sorted(list(qrels_docs))[:5]}")
+        #print(f"Run docs: {sorted(list(run_docs))[:5]}")
+        #print(f"Overlapping docs: {sorted(list(qrels_docs.intersection(run_docs)))}")
     
     # Filter run to only include queries that have qrels
     queries_with_qrels = set(qrels['query_id'].unique())
@@ -160,6 +157,15 @@ def evaluate_results(
         elif metric.startswith('judged@'):
             k = int(metric.split('@')[1])
             ir_metrics.append(ir_measures.Judged(cutoff=k))
+    
+    # Add this right before the ir_measures evaluation
+    print("\nDEBUG: Final document ID formats:")
+    print("Sample qrels:")
+    print(qrels[['query_id', 'doc_id', 'relevance']].head())
+    print("\nUnique qrels doc_id formats:", sorted(qrels['doc_id'].unique())[:5])
+    print("\nSample run:")
+    print(run[['query_id', 'doc_id', 'score']].head())
+    print("\nUnique run doc_id formats:", sorted(run['doc_id'].unique())[:5])
     
     # Create evaluator and calculate results
     evaluator = ir_measures.evaluator(ir_metrics, qrels)

@@ -175,19 +175,46 @@ def get_batch_scores(
         print("Sample of documents with missing text:")
         print(results[results['text'].isna()][['qid', 'docno']].head())
     
-    # Clean and format results
-    results = results.rename(columns={
+    print("\nDEBUG: Columns in results before cleaning:", results.columns.tolist())
+    print("DEBUG: Sample of results before cleaning:")
+    print(results.head())
+    
+    # Clean up column names first
+    # Keep the first occurrence of each column name
+    results = results.loc[:, ~results.columns.duplicated(keep='first')]
+    
+    # Rename columns
+    column_mapping = {
         'score': 'docScore',
-        'docid': 'docno' if 'docno' not in results.columns else 'docno'
-    })
+        'docid': 'docno'
+    }
+    # Only rename columns that exist
+    for old_col, new_col in column_mapping.items():
+        if old_col in results.columns and new_col not in results.columns:
+            results = results.rename(columns={old_col: new_col})
     
-    # Add rank column if not present
-    if 'rank' not in results.columns:
-        results['rank'] = results.groupby('qid').cumcount() + 1
+    print("\nDEBUG: After cleaning columns:")
+    print("Columns:", results.columns.tolist())
+    print(results.head())
     
-    # Ensure consistent column order
-    columns = ['qid', 'docno', 'docScore', 'rank', 'text']
-    extra_cols = [col for col in results.columns if col not in columns]
-    results = results[columns + extra_cols]
+    # Ensure docno is string type and clean doc prefix if present
+    if 'docno' in results.columns:
+        # Convert to string and handle doc prefix
+        results['docno'] = results['docno'].astype(str)
+        # Remove 'doc' prefix where it exists
+        results['docno'] = results['docno'].apply(lambda x: x[3:] if x.startswith('doc') else x)
+    else:
+        print("WARNING: 'docno' column not found in results DataFrame")
+        print("Available columns:", results.columns.tolist())
+    
+    print("\nDEBUG: Final results sample:")
+    print(results[['qid', 'docno', 'docScore']].head())
+    print("\nDEBUG: Unique docno values:", sorted(results['docno'].unique())[:5])
+    
+    # Additional debug information
+    print("\nDEBUG: Results DataFrame Info:")
+    print(results.info())
+    print("\nDEBUG: Sample of complete results row:")
+    print(results.iloc[0].to_dict())
     
     return results

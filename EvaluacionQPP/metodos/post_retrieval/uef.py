@@ -32,6 +32,74 @@ class UEF(PostRetrievalMethod):
 
         self.rm_results_df = rm_results_df if rm_results_df is not None else retrieval_results
 
+        
+
+        # Clean up column names in both dataframes
+
+        self.retrieval_results = self._clean_dataframe(self.retrieval_results)
+
+        self.rm_results_df = self._clean_dataframe(self.rm_results_df)
+
+    
+
+    def _clean_dataframe(self, df):
+
+        """
+
+        Clean up DataFrame columns and ensure consistent naming.
+
+        
+
+        Args:
+
+            df: DataFrame to clean up
+
+        
+
+        Returns:
+
+            Cleaned DataFrame
+
+        """
+
+        # Remove duplicate columns
+
+        df = df.loc[:, ~df.columns.duplicated(keep='first')]
+
+        
+
+        # Standardize column names
+
+        column_mapping = {
+
+            'docno': 'doc_id',  # Map both docno columns to doc_id
+
+            'score': 'docScore'
+
+        }
+
+        
+
+        # Only rename columns that exist
+
+        for old_col, new_col in column_mapping.items():
+
+            if old_col in df.columns:
+
+                df = df.rename(columns={old_col: new_col})
+
+        
+
+        # Ensure doc_id is string type and strip any whitespace
+
+        if 'doc_id' in df.columns:
+
+            df['doc_id'] = df['doc_id'].astype(str).str.strip()
+
+        
+
+        return df
+
 
 
     def compute_scores_batch(self, processed_queries: Dict[str, list], predictor_scores: Dict[str, float], 
@@ -72,7 +140,7 @@ class UEF(PostRetrievalMethod):
 
                 self.retrieval_results['qid'] == qid
 
-            ].head(list_size)
+            ].head(list_size).copy()
 
             
 
@@ -82,41 +150,111 @@ class UEF(PostRetrievalMethod):
 
                 self.rm_results_df['qid'] == qid
 
-            ].head(list_size)
+            ].head(list_size).copy()
 
             
 
-            # Calculate UEF score using correlation method
+            print(f"\nDEBUG UEF - Query {qid}:")
+
+            print("Original results sample with types:")
+
+            print(original_results[['qid', 'doc_id', 'docScore']].head().to_string())
+
+            print("\nDoc_id type:", original_results['doc_id'].dtype)
+
+            print("Sample doc_id values:", original_results['doc_id'].head().tolist())
+
+            
+
+            print("\nRM results sample with types:")
+
+            print(rm_results[['qid', 'doc_id', 'docScore']].head().to_string())
+
+            print("\nDoc_id type:", rm_results['doc_id'].dtype)
+
+            print("Sample doc_id values:", rm_results['doc_id'].head().tolist())
+
+            
 
             if not original_results.empty and not rm_results.empty:
 
-                # Create score series indexed by docno
+                try:
 
-                original_scores = original_results.set_index('docno')['docScore']
+                    # Ensure doc_id is string type and clean
 
-                rm_scores = rm_results.set_index('docno')['docScore']
+                    original_results['doc_id'] = original_results['doc_id'].astype(str).str.strip()
 
-                
+                    rm_results['doc_id'] = rm_results['doc_id'].astype(str).str.strip()
 
-                # Calculate correlation using only documents that appear in both rankings
+                    
 
-                common_docs = original_scores.index.intersection(rm_scores.index)
+                    # Create score series indexed by doc_id
 
-                if len(common_docs) >= 2:  # Need at least 2 documents for correlation
+                    original_scores = original_results.set_index('doc_id')['docScore']
 
-                    similarity = original_scores[common_docs].corr(rm_scores[common_docs])
+                    rm_scores = rm_results.set_index('doc_id')['docScore']
 
-                    uef_scores[qid] = similarity * predictor_scores.get(qid, 0.0)
+                    
 
-                else:
+                    # Debug print
+
+                    print("\nOriginal scores index:", original_scores.index.tolist())
+
+                    print("RM scores index:", rm_scores.index.tolist())
+
+                    
+
+                    # Calculate correlation using only documents that appear in both rankings
+
+                    common_docs = original_scores.index.intersection(rm_scores.index)
+
+                    print(f"\nNumber of common documents: {len(common_docs)}")
+
+                    print("Common documents:", sorted(list(common_docs)))
+
+                    
+
+                    if len(common_docs) >= 2:
+
+                        # Get scores for common documents
+
+                        orig_common = original_scores[common_docs]
+
+                        rm_common = rm_scores[common_docs]
+
+                        
+
+                        print("\nOriginal scores for common docs:", orig_common.tolist())
+
+                        print("RM scores for common docs:", rm_common.tolist())
+
+                        
+
+                        similarity = orig_common.corr(rm_common)
+
+                        uef_scores[qid] = similarity * predictor_scores.get(qid, 0.0)
+
+                        print(f"Correlation: {similarity}, Final UEF score: {uef_scores[qid]}")
+
+                    else:
+
+                        print("Not enough common documents for correlation")
+
+                        uef_scores[qid] = 0.0
+
+                except Exception as e:
+
+                    print(f"Error computing UEF score for query {qid}: {str(e)}")
 
                     uef_scores[qid] = 0.0
 
             else:
 
+                print("Empty results for query")
+
                 uef_scores[qid] = 0.0
 
-            
+        
 
         return uef_scores
 
@@ -156,36 +294,42 @@ class UEF(PostRetrievalMethod):
 
 
 
-        # Prepare score series indexed by docno for correlation calculation
+        try:
 
-        original_scores = original_results.set_index('docno')['docScore']
+            # Use doc_id for correlation calculation
 
-        rm_scores = rm_results.set_index('docno')['docScore']
+            original_scores = original_results.set_index('doc_id')['docScore']
 
-        
-
-        # Calculate correlation between original and RM rankings
-
-        # Using only documents that appear in both rankings
-
-        common_docs = original_scores.index.intersection(rm_scores.index)
-
-        if len(common_docs) < 2:  # Need at least 2 documents for correlation
-
-            return 0.0
+            rm_scores = rm_results.set_index('doc_id')['docScore']
 
             
 
-        correlation = original_scores[common_docs].corr(rm_scores[common_docs])
+            # Calculate correlation between original and RM rankings
 
-        
+            common_docs = original_scores.index.intersection(rm_scores.index)
 
-        # Calculate final UEF score
+            if len(common_docs) < 2:  # Need at least 2 documents for correlation
 
-        uef_score = correlation * predictor_score
+                return 0.0
 
-        
+                
 
-        return uef_score
+            correlation = original_scores[common_docs].corr(rm_scores[common_docs])
+
+            
+
+            # Calculate final UEF score
+
+            uef_score = correlation * predictor_score
+
+            
+
+            return uef_score
+
+        except Exception as e:
+
+            print(f"Error computing UEF score: {str(e)}")
+
+            return 0.0
 
 

@@ -72,14 +72,6 @@ class QPPMethodFactory:
     def compute_all_scores(self, queries: Dict[str, str], **kwargs) -> Dict[str, Dict[str, float]]:
         """
         Compute scores for all available QPP methods.
-        
-        Args:
-            queries: Dictionary mapping query IDs to query strings
-            **kwargs: Additional arguments for specific methods
-                     (e.g., list_size_param for WIG/NQC)
-        
-        Returns:
-            Dictionary mapping query IDs to dictionaries of method scores
         """
         processed_queries = self.preprocess_queries(queries)
         scores = {}
@@ -102,6 +94,10 @@ class QPPMethodFactory:
         # Add post-retrieval scores if available
         if hasattr(self, 'wig'):
             list_size = kwargs.get('list_size_param', 10)
+            
+            print("\nDEBUG QPP Factory - Computing post-retrieval scores")
+            print(f"List size: {list_size}")
+            
             wig_scores = self.wig.compute_scores_batch(processed_queries, list_size_param=list_size)
             nqc_scores = self.nqc.compute_scores_batch(processed_queries, list_size_param=list_size)
             clarity_scores = self.clarity.compute_scores_batch(processed_queries)
@@ -115,8 +111,12 @@ class QPPMethodFactory:
             
             # Add UEF scores if available
             if hasattr(self, 'uef'):
-                uef_wig_scores = self.uef.compute_scores_batch(processed_queries, wig_scores)
-                uef_nqc_scores = self.uef.compute_scores_batch(processed_queries, nqc_scores)
+                print("\nDEBUG QPP Factory - Computing UEF scores")
+                print("Sample of retrieval results columns:", self.retrieval_results.columns.tolist())
+                print("Sample of RM results columns:", self.rm_results.columns.tolist())
+                
+                uef_wig_scores = self.uef.compute_scores_batch(processed_queries, wig_scores, list_size)
+                uef_nqc_scores = self.uef.compute_scores_batch(processed_queries, nqc_scores, list_size)
                 
                 for qid in queries:
                     scores[qid].update({
