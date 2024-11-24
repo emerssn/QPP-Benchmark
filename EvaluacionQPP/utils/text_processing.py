@@ -22,7 +22,7 @@ def preprocess_text(text, dataset_name=None):
         language = 'english'  # default
     
     # Print debug info
-    print(f"Original: {text}")
+    #print(f"Original: {text}")
     
     # Convert to lowercase and remove punctuation
     text = re.sub(r'[^\w\s]', '', text.lower())
@@ -40,7 +40,7 @@ def preprocess_text(text, dataset_name=None):
     stemmer = SnowballStemmer(language)
     tokens = [stemmer.stem(token) for token in tokens]
     
-    print(f"Tokens: {tokens}")
-    print(f"Language: {language}")
+    #print(f"Tokens: {tokens}")
+    #print(f"Language: {language}")
     
     return tokens

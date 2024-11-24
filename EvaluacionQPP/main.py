@@ -9,6 +9,7 @@ from EvaluacionQPP.data.dataset_processor import DatasetProcessor
 from EvaluacionQPP.indexing.index_builder import IndexBuilder
 from EvaluacionQPP.metodos.qpp_factory import QPPMethodFactory
 from EvaluacionQPP.retrieval.retrieval import get_batch_scores
+from EvaluacionQPP.evaluation.evaluator import evaluate_results
 
 nltk.download('punkt')
 nltk.download('stopwords')
@@ -94,6 +95,27 @@ def main():
         }
     )
     
+    # Get qrels
+    qrels = dataset_processor.get_qrels()
+    
+    # Evaluate retrieval results
+    evaluation_results = evaluate_results(
+        qrels_df=qrels,
+        results_df=retrieval_results,
+        metrics=['ndcg@5', 'ndcg@10', 'ndcg@20'],
+        output_dir=os.path.join(script_dir, "evaluation_results"),
+        dataset_name=dataset_name
+    )
+    
+    # Print evaluation results
+    print("\nRetrieval Evaluation Results:")
+    for metric, scores in evaluation_results.items():
+        print(f"\n{metric.upper()}:")
+        print(f"Mean: {scores['mean']:.4f}")
+        print("Sample of per-query scores:")
+        for qid, score in list(scores['per_query'].items())[:5]:
+            print(f"  Query {qid}: {score:.4f}")
+    
     # Create QPP factory and compute all scores
     qpp_factory = QPPMethodFactory(
         index_builder=index_builder,
@@ -117,40 +139,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -29,7 +29,7 @@ class WIG(PostRetrievalMethod):
         if not scores:
             print("No scores found in the top retrieval results.")
             return np.array([0.0])
-        print(f"Initialized scores_vec: {scores}")
+        #print(f"Initialized scores_vec: {scores}")
         return np.array(scores)
 
     def _calc_corpus_score(self):
@@ -48,7 +48,7 @@ class WIG(PostRetrievalMethod):
             log_cf = np.log(np.where(cf_vec == 0, 1, cf_vec) / self.total_tokens)
         # Use mean to mitigate impact of outliers
         corpus_score = log_cf.mean()
-        print(f"Calculated corpus_score: {corpus_score}")
+        #print(f"Calculated corpus_score: {corpus_score}")
         return corpus_score
 
     def compute_score(self, query_id, query_terms, list_size_param=10):

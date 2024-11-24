@@ -41,7 +41,7 @@ class IndexBuilder:
                 self.total_docs += 1
                 
                 yield {
-                    'docno': prev_doc[0],
+                    'docno': str(prev_doc[0]),
                     'text': ' '.join(processed_text),
                 }
                 
@@ -52,7 +52,7 @@ class IndexBuilder:
             self.total_docs += 1
             
             yield {
-                'docno': prev_doc[0],
+                'docno': str(prev_doc[0]),
                 'text': ' '.join(processed_text),
             }
 

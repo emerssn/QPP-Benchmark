@@ -7,34 +7,38 @@ class IquiqueDataset:
     def __init__(self):
         # Documentos de muestra con docno y texto
         self.documents = {
-            "doc1": "Iquique es una ciudad portuaria y comuna del norte de Chile, capital de la provincia homónima y de la región de Tarapacá",
-            "doc2": "La Zona Franca de Iquique (ZOFRI) es uno de los centros comerciales más importantes del norte de Chile y Sudamérica",
-            "doc3": "Playa Cavancha es la playa urbana más popular de Iquique, ideal para el surf y deportes acuáticos",
-            "doc4": "El Museo Regional de Iquique exhibe la historia de la cultura Chinchorro y la época del salitre",
-            "doc5": "El clima de Iquique es desértico costero con abundante nubosidad y temperaturas moderadas durante todo el año",
-            "doc6": "La Guerra del Pacífico tuvo un impacto significativo en Iquique, con el combate naval de 1879 entre Chile y Perú",
-            "doc7": "La industria del salitre transformó Iquique en el siglo XIX, atrayendo inmigrantes europeos y chinos a la región",
-            "doc8": "El patrimonio cultural de Iquique incluye edificios históricos de la época salitrera y tradiciones pampinas"
+            "doc0": "Iquique es una ciudad portuaria y comuna del norte de Chile, capital de la provincia homónima y de la región de Tarapacá",
+            "doc1": "La Zona Franca de Iquique (ZOFRI) es uno de los centros comerciales más importantes del norte de Chile y Sudamérica",
+            "doc2": "Playa Cavancha es la playa urbana más popular de Iquique, ideal para el surf y deportes acuáticos",
+            "doc3": "El Museo Regional de Iquique exhibe la historia de la cultura Chinchorro y la época del salitre",
+            "doc4": "El clima de Iquique es desértico costero con abundante nubosidad y temperaturas moderadas durante todo el año",
+            "doc5": "La Guerra del Pacífico tuvo un impacto significativo en Iquique, con el combate naval de 1879 entre Chile y Perú",
+            "doc6": "La industria del salitre transformó Iquique en el siglo XIX, atrayendo inmigrantes europeos y chinos a la región",
+            "doc7": "El patrimonio cultural de Iquique incluye edificios históricos de la época salitrera y tradiciones pampinas"
         }
+        
+        # Create a mapping for docno to internal ID (now using the same IDs)
+        self.docno_to_id = {k: k for k in self.documents.keys()}
+        self.id_to_docno = self.docno_to_id
         
         # Consultas de muestra con qid y texto de consulta
         self.topics = pd.DataFrame([
-            {"qid": "q1", "query": "playa cavancha iquique"},
-            {"qid": "q2", "query": "zona franca zofri"},
-            {"qid": "q3", "query": "museo historia iquique"},
-            {"qid": "q4", "query": "historia salitre guerra pacifico"}  # Consulta difícil y ambigua
+            {"qid": "0", "query": "playa cavancha iquique"},
+            {"qid": "1", "query": "zona franca zofri"},
+            {"qid": "2", "query": "museo historia iquique"},
+            {"qid": "3", "query": "historia salitre guerra pacifico"}
         ])
         
         # Juicios de relevancia de muestra (qrels)
         self.qrels = pd.DataFrame([
-            {"qid": "q1", "docno": "doc3", "relevance": 1},
-            {"qid": "q2", "docno": "doc2", "relevance": 1},
-            {"qid": "q3", "docno": "doc4", "relevance": 1},
-            {"qid": "q3", "docno": "doc1", "relevance": 1},
-            {"qid": "q4", "docno": "doc4", "relevance": 1},  # Relevante por mención del salitre
-            {"qid": "q4", "docno": "doc6", "relevance": 1},  # Relevante por la Guerra del Pacífico
-            {"qid": "q4", "docno": "doc7", "relevance": 2},  # Muy relevante por combinar salitre e historia
-            {"qid": "q4", "docno": "doc8", "relevance": 1}   # Relevante por contexto histórico
+            {"qid": "0", "docno": "doc2", "relevance": 1},
+            {"qid": "1", "docno": "doc1", "relevance": 1},
+            {"qid": "2", "docno": "doc3", "relevance": 1},
+            {"qid": "2", "docno": "doc0", "relevance": 1},
+            {"qid": "3", "docno": "doc3", "relevance": 1},
+            {"qid": "3", "docno": "doc5", "relevance": 1},
+            {"qid": "3", "docno": "doc6", "relevance": 2},
+            {"qid": "3", "docno": "doc7", "relevance": 1}
         ])
 
     def get_corpus_iter(self) -> Iterator[Dict[str, Any]]:
@@ -65,15 +69,11 @@ class IquiqueDataset:
     def text_loader(self, metadata=None, verbose=False, **kwargs) -> Dict[str, str]:
         """
         Método requerido por PyTerrier para cargar el texto de los documentos.
-        
-        Args:
-            metadata: Metadatos adicionales (no usado en este caso)
-            verbose: Flag para mostrar información adicional
-            **kwargs: Argumentos adicionales que PyTerrier podría pasar
-            
-        Returns:
-            Dict[str, str]: Diccionario que mapea docno a texto del documento
         """
         if verbose:
             print("Loading text from IquiqueDataset...")
         return self.documents
+
+    def map_docno(self, docno: str) -> str:
+        """Maps between internal and external document IDs"""
+        return docno  # Since we're using the same IDs now, just return the input

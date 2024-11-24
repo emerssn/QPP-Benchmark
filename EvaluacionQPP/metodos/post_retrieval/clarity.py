@@ -33,24 +33,30 @@ class Clarity(PostRetrievalMethod):
     def compute_score(self, query_terms: list, topk_docs: pd.DataFrame) -> float:
         """
         Compute the Clarity score for a single query.
-
-        Args:
-            query_terms (list): List of processed query terms.
-            topk_docs (pd.DataFrame): DataFrame of top-k retrieved documents for the query.
-
-        Returns:
-            float: Clarity score.
         """
         if topk_docs.empty or not query_terms:
+            print(f"Warning: Empty docs or query terms. Docs shape: {topk_docs.shape}, Terms: {query_terms}")
             return 0.0
 
         # Compute term frequencies in top-k documents
         topk_term_freq = {}
         for text in topk_docs['text']:
+            # Skip None or NaN values
+            if pd.isna(text):
+                print(f"Warning: Found NaN text in document")
+                continue
+            
             terms = preprocess_text(text, dataset_name=self.dataset_name)
             for term in terms:
                 topk_term_freq[term] = topk_term_freq.get(term, 0) + 1
 
+        # If no valid terms were found, return 0
+        if not topk_term_freq:
+            print("Warning: No valid terms found in documents")
+            return 0.0
+
+        #print(f"Number of unique terms found: {len(topk_term_freq)}")
+        
         total_topk_terms = sum(topk_term_freq.values())
 
         # Compute P(w|D^k_{q,M})

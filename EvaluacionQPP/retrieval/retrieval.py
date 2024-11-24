@@ -25,16 +25,19 @@ def perform_retrieval(index, queries_df, dataset, method='BM25'):  # {{ edit_1 }
         bm25 = pt.BatchRetrieve(index, wmodel='BM25')
         retrieval_results = bm25.transform(queries_df)
         retrieval_results = retrieval_results.rename(columns={'score': 'docScore'})  # Rename here
+        retrieval_results['doc_id'] = retrieval_results['doc_id'].astype(str)  # {{ edit_1 }}
         return retrieval_results
     elif method == 'QL':
         ql = pt.BatchRetrieve(index, wmodel='QL')
         retrieval_results = ql.transform(queries_df)
         retrieval_results = retrieval_results.rename(columns={'score': 'docScore'})  # Rename here
+        retrieval_results['doc_id'] = retrieval_results['doc_id'].astype(str)  # {{ edit_1 }}
         return retrieval_results
     elif method == 'RM':
         rm = pt.BatchRetrieve(index, wmodel='RM3')
         retrieval_results = rm.transform(queries_df)
         retrieval_results = retrieval_results.rename(columns={'score': 'docScore'})  # Rename here
+        retrieval_results['doc_id'] = retrieval_results['doc_id'].astype(str)  # {{ edit_1 }}
         return retrieval_results
     else:
         raise ValueError(f"Unknown retrieval method: {method}")
@@ -122,15 +125,6 @@ def get_batch_scores(
             controls=controls.get('BM25', {}),
             num_results=num_results
         )
-        # Only add text getter if dataset is not our custom dataset
-        if not isinstance(dataset, IquiqueDataset):
-            retriever = retriever >> pt.text.get_text(dataset, "text")
-        else:
-            # For our custom dataset, add the text directly from the documents
-            def add_text(res):
-                res['text'] = res['docno'].map(dataset.documents)
-                return res
-            retriever = retriever >> add_text
     elif method == 'TF_IDF':
         retriever = pt.BatchRetrieve(
             index, 
@@ -146,7 +140,6 @@ def get_batch_scores(
             num_results=num_results
         )
     elif method == 'RM3':
-        # Use the new RM3 function
         return perform_rm3_retrieval(
             index,
             queries_df,
@@ -157,8 +150,30 @@ def get_batch_scores(
     else:
         raise ValueError(f"Unsupported retrieval method: {method}")
     
-    # Perform batch retrieval
+    # Get initial results
     results = retriever.transform(queries_df)
+    
+    # Add text based on dataset type
+    if isinstance(dataset, IquiqueDataset):
+        # For IquiqueDataset, directly map docno to text
+        results['text'] = results['docno'].map(dataset.documents)
+        
+        # Debug print
+        print("\nDebug: Sample of results after text mapping:")
+        print(results[['qid', 'docno', 'text']].head())
+        print(f"Number of documents with text: {results['text'].notna().sum()}")
+        print(f"Total number of documents: {len(results)}")
+    else:
+        # Use the getter of text from PyTerrier for other datasets
+        text_getter = pt.text.get_text(dataset, "text")
+        results = text_getter.transform(results)
+    
+    # Check for missing text
+    missing_text = results['text'].isna().sum()
+    if missing_text > 0:
+        print(f"Warning: {missing_text} documents don't have text assigned")
+        print("Sample of documents with missing text:")
+        print(results[results['text'].isna()][['qid', 'docno']].head())
     
     # Clean and format results
     results = results.rename(columns={
@@ -171,7 +186,7 @@ def get_batch_scores(
         results['rank'] = results.groupby('qid').cumcount() + 1
     
     # Ensure consistent column order
-    columns = ['qid', 'docno', 'docScore', 'rank']
+    columns = ['qid', 'docno', 'docScore', 'rank', 'text']
     extra_cols = [col for col in results.columns if col not in columns]
     results = results[columns + extra_cols]
     
