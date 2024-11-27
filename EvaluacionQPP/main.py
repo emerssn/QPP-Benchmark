@@ -28,6 +28,8 @@ def main():
     parser.add_argument('--dataset', type=str, default="antique_test",
                        choices=AVAILABLE_DATASETS.keys(),
                        help='Dataset identifier (default: antique_test)')
+    parser.add_argument('--max-queries', type=int, default=None,
+                       help='Maximum number of queries to process (default: None, process all queries)')
     
     args = parser.parse_args()
     dataset_name = AVAILABLE_DATASETS[args.dataset]
@@ -56,9 +58,13 @@ def main():
     # Get queries
     try:
         queries = dataset_processor.get_queries()
-        print(f"Total queries: {len(queries)}")
-        print("Sample of queries:")
-        for qid, query in list(queries.items())[:5]:
+        # Limit number of queries only if max_queries is specified
+        if args.max_queries is not None:
+            query_ids = list(queries.keys())[:args.max_queries]
+            queries = {qid: queries[qid] for qid in query_ids}
+        
+        print(f"\nProcessing {len(queries)} queries:")
+        for qid, query in queries.items():
             print(f"  Query ID: {qid}, Query: {query}")
     except ValueError as e:
         print(f"Error getting queries: {e}")

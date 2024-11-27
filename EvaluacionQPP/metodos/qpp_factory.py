@@ -1,3 +1,5 @@
+import logging
+from functools import lru_cache
 from typing import Dict, Union, List, Any
 from .pre_retrieval.idf import IDF
 from .pre_retrieval.scq import SCQ
@@ -6,6 +8,10 @@ from .post_retrieval.nqc import NQC
 from .post_retrieval.clarity import Clarity
 from .post_retrieval.uef import UEF
 from ..utils.text_processing import preprocess_text
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class QPPMethodFactory:
     """
@@ -47,81 +53,74 @@ class QPPMethodFactory:
             if self.rm_results is not None:
                 self.uef = UEF(self.index_builder, self.retrieval_results, self.rm_results)
     
-    def preprocess_queries(self, queries: Union[str, Dict[str, str], List[str]]) -> Union[List[str], Dict[str, List[str]]]:
+    @lru_cache(maxsize=128)
+    def preprocess_queries(self, query_key: Union[str, tuple]) -> Union[List[str], Dict[str, List[str]]]:
         """
-        Preprocess queries based on their type.
+        Preprocess and cache queries based on their type.
         
         Args:
-            queries: Can be a single query string, dictionary of queries, or list of queries
+            query_key: Either a query string or a tuple of (qid, query) pairs
             
         Returns:
             Preprocessed queries in the same format as input
         """
-        if isinstance(queries, str):
-            return preprocess_text(queries, dataset_name=self.dataset_name)
-        elif isinstance(queries, dict):
+        if isinstance(query_key, str):
+            return preprocess_text(query_key, dataset_name=self.dataset_name)
+        elif isinstance(query_key, tuple):
             return {
                 qid: preprocess_text(query, dataset_name=self.dataset_name)
-                for qid, query in queries.items()
+                for qid, query in query_key
             }
-        elif isinstance(queries, list):
-            return [preprocess_text(q, dataset_name=self.dataset_name) for q in queries]
         else:
-            raise ValueError(f"Unsupported query type: {type(queries)}")
+            raise ValueError(f"Unsupported query type: {type(query_key)}")
     
     def compute_all_scores(self, queries: Dict[str, str], **kwargs) -> Dict[str, Dict[str, float]]:
-        """
-        Compute scores for all available QPP methods.
-        """
-        processed_queries = self.preprocess_queries(queries)
+        """Compute scores for all available QPP methods."""
+        # Convert queries dict to hashable tuple for caching
+        query_items = tuple(queries.items())
+        processed_queries = self.preprocess_queries(query_items)
         scores = {}
         
         # Compute pre-retrieval scores
-        idf_scores_avg = self.idf.compute_scores_batch(processed_queries, method='avg')
-        idf_scores_max = self.idf.compute_scores_batch(processed_queries, method='max')
-        scq_scores_avg = self.scq.compute_scores_batch(processed_queries, method='avg')
-        scq_scores_max = self.scq.compute_scores_batch(processed_queries, method='max')
-        
-        # Initialize scores dictionary
         for qid in queries:
             scores[qid] = {
-                'idf_avg': idf_scores_avg.get(qid, 0.0),
-                'idf_max': idf_scores_max.get(qid, 0.0),
-                'scq_avg': scq_scores_avg.get(qid, 0.0),
-                'scq_max': scq_scores_max.get(qid, 0.0)
+                'idf_avg': self.idf.compute_scores_batch(processed_queries, method='avg').get(qid, 0.0),
+                'idf_max': self.idf.compute_scores_batch(processed_queries, method='max').get(qid, 0.0),
+                'scq_avg': self.scq.compute_scores_batch(processed_queries, method='avg').get(qid, 0.0),
+                'scq_max': self.scq.compute_scores_batch(processed_queries, method='max').get(qid, 0.0)
             }
         
         # Add post-retrieval scores if available
         if hasattr(self, 'wig'):
             list_size = kwargs.get('list_size_param', 10)
+            logger.info(f"Computing post-retrieval scores with list size: {list_size}")
             
-            print("\nDEBUG QPP Factory - Computing post-retrieval scores")
-            print(f"List size: {list_size}")
+            # Compute post-retrieval scores
+            post_retrieval_scores = {
+                'wig': self.wig.compute_scores_batch(processed_queries, list_size_param=list_size),
+                'nqc': self.nqc.compute_scores_batch(processed_queries, list_size_param=list_size),
+                'clarity': self.clarity.compute_scores_batch(processed_queries)
+            }
             
-            wig_scores = self.wig.compute_scores_batch(processed_queries, list_size_param=list_size)
-            nqc_scores = self.nqc.compute_scores_batch(processed_queries, list_size_param=list_size)
-            clarity_scores = self.clarity.compute_scores_batch(processed_queries)
-            
+            # Update scores dictionary
             for qid in queries:
                 scores[qid].update({
-                    'wig': wig_scores.get(qid, 0.0),
-                    'nqc': nqc_scores.get(qid, 0.0),
-                    'clarity': clarity_scores.get(qid, 0.0)
+                    method: score_dict.get(qid, 0.0)
+                    for method, score_dict in post_retrieval_scores.items()
                 })
             
             # Add UEF scores if available
             if hasattr(self, 'uef'):
-                print("\nDEBUG QPP Factory - Computing UEF scores")
-                print("Sample of retrieval results columns:", self.retrieval_results.columns.tolist())
-                print("Sample of RM results columns:", self.rm_results.columns.tolist())
-                
-                uef_wig_scores = self.uef.compute_scores_batch(processed_queries, wig_scores, list_size)
-                uef_nqc_scores = self.uef.compute_scores_batch(processed_queries, nqc_scores, list_size)
+                logger.debug("Computing UEF scores")
+                uef_scores = {
+                    'uef_wig': self.uef.compute_scores_batch(processed_queries, post_retrieval_scores['wig'], list_size),
+                    'uef_nqc': self.uef.compute_scores_batch(processed_queries, post_retrieval_scores['nqc'], list_size)
+                }
                 
                 for qid in queries:
                     scores[qid].update({
-                        'uef_wig': uef_wig_scores.get(qid, 0.0),
-                        'uef_nqc': uef_nqc_scores.get(qid, 0.0)
+                        method: score_dict.get(qid, 0.0)
+                        for method, score_dict in uef_scores.items()
                     })
         
         return scores 

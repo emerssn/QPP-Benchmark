@@ -55,7 +55,7 @@ def perform_rm3_retrieval(
     Performs retrieval using the RM3 (Relevance Model 3) method.
     """
     # Create simple RM3 pipeline
-    bm25 = pt.BatchRetrieve(index, wmodel="BM25")
+    bm25 = pt.BatchRetrieve(index, wmodel="BM25", num_results=num_results)
     rm3_pipe = bm25 >> pt.rewrite.RM3(index) >> bm25
     
     # Add text based on dataset type
@@ -70,21 +70,31 @@ def perform_rm3_retrieval(
     # Perform retrieval
     results = rm3_pipe.transform(queries_df)
     
-    # Clean and format results
-    results = results.rename(columns={
+    # Clean up column names first
+    # Keep the first occurrence of each column name
+    results = results.loc[:, ~results.columns.duplicated(keep='first')]
+    
+    # Rename columns
+    column_mapping = {
         'score': 'docScore',
-        'docid': 'docno' if 'docno' not in results.columns else 'docno'
-    })
+        'docid': 'docno'  # Map docid to docno if it exists
+    }
+    # Only rename columns that exist
+    for old_col, new_col in column_mapping.items():
+        if old_col in results.columns and new_col not in results.columns:
+            results = results.rename(columns={old_col: new_col})
     
-    # Add rank if not present
-    if 'rank' not in results.columns:
-        results['rank'] = results.groupby('qid').cumcount() + 1
+    # Ensure docno is string type
+    if 'docno' in results.columns:
+        results['docno'] = results['docno'].astype(str)
     
-    # Ensure we only return num_results per query
-    results = results.groupby('qid').head(num_results)
+    # Reset index to ensure proper ordering
+    results = results.reset_index(drop=True)
     
-    # Sort by qid and rank
-    results = results.sort_values(['qid', 'rank'])
+    print("\nDEBUG - RM3 results:")
+    print("Columns:", results.columns.tolist())
+    print("Sample results:")
+    print(results[['qid', 'docno', 'docScore']].head())
     
     return results
 
@@ -140,16 +150,19 @@ def get_batch_scores(
             num_results=num_results
         )
     elif method == 'RM3':
+        rm3_controls = controls.get('RM3', {})
         return perform_rm3_retrieval(
             index,
             queries_df,
             dataset,
-            **controls.get('RM3', {}),
+            fb_terms=rm3_controls.get('fb_terms', 10),
+            fb_docs=rm3_controls.get('fb_docs', 10),
+            original_weight=rm3_controls.get('original_weight', 0.5),
             num_results=num_results
         )
     else:
         raise ValueError(f"Unsupported retrieval method: {method}")
-    
+
     # Get initial results
     results = retriever.transform(queries_df)
     
@@ -157,27 +170,10 @@ def get_batch_scores(
     if isinstance(dataset, IquiqueDataset):
         # For IquiqueDataset, directly map docno to text
         results['text'] = results['docno'].map(dataset.documents)
-        
-        # Debug print
-        print("\nDebug: Sample of results after text mapping:")
-        print(results[['qid', 'docno', 'text']].head())
-        print(f"Number of documents with text: {results['text'].notna().sum()}")
-        print(f"Total number of documents: {len(results)}")
     else:
         # Use the getter of text from PyTerrier for other datasets
         text_getter = pt.text.get_text(dataset, "text")
         results = text_getter.transform(results)
-    
-    # Check for missing text
-    missing_text = results['text'].isna().sum()
-    if missing_text > 0:
-        print(f"Warning: {missing_text} documents don't have text assigned")
-        print("Sample of documents with missing text:")
-        print(results[results['text'].isna()][['qid', 'docno']].head())
-    
-    print("\nDEBUG: Columns in results before cleaning:", results.columns.tolist())
-    print("DEBUG: Sample of results before cleaning:")
-    print(results.head())
     
     # Clean up column names first
     # Keep the first occurrence of each column name
@@ -186,35 +182,23 @@ def get_batch_scores(
     # Rename columns
     column_mapping = {
         'score': 'docScore',
-        'docid': 'docno'
+        'docid': 'docno'  # Map docid to docno if it exists
     }
     # Only rename columns that exist
     for old_col, new_col in column_mapping.items():
         if old_col in results.columns and new_col not in results.columns:
             results = results.rename(columns={old_col: new_col})
     
-    print("\nDEBUG: After cleaning columns:")
-    print("Columns:", results.columns.tolist())
-    print(results.head())
-    
-    # Ensure docno is string type and clean doc prefix if present
+    # Ensure docno is string type
     if 'docno' in results.columns:
-        # Convert to string and handle doc prefix
         results['docno'] = results['docno'].astype(str)
-        # Remove 'doc' prefix where it exists
-        results['docno'] = results['docno'].apply(lambda x: x[3:] if x.startswith('doc') else x)
-    else:
-        print("WARNING: 'docno' column not found in results DataFrame")
-        print("Available columns:", results.columns.tolist())
     
-    print("\nDEBUG: Final results sample:")
+    # Reset index to ensure proper ordering
+    results = results.reset_index(drop=True)
+    
+    print(f"\nDEBUG - {method} results:")
+    print("Columns:", results.columns.tolist())
+    print("Sample results:")
     print(results[['qid', 'docno', 'docScore']].head())
-    print("\nDEBUG: Unique docno values:", sorted(results['docno'].unique())[:5])
-    
-    # Additional debug information
-    print("\nDEBUG: Results DataFrame Info:")
-    print(results.info())
-    print("\nDEBUG: Sample of complete results row:")
-    print(results.iloc[0].to_dict())
     
     return results
