@@ -2,11 +2,13 @@ import numpy as np
 import pandas as pd
 from typing import Dict
 from ..base import PostRetrievalMethod
+from ...evaluation.evaluator import DATASET_FORMATS
 
 class UEF(PostRetrievalMethod):
-    def __init__(self, index_builder, retrieval_results, rm_results_df=None):
+    def __init__(self, index_builder, retrieval_results, rm_results_df=None, dataset_name="antique_test"):
         super().__init__(index_builder, retrieval_results)
         self.rm_results_df = rm_results_df if rm_results_df is not None else retrieval_results
+        self.dataset_config = DATASET_FORMATS.get(dataset_name, DATASET_FORMATS["antique_test"])
         
         # Clean up column names in both dataframes
         self.retrieval_results = self._clean_dataframe(self.retrieval_results)
@@ -32,9 +34,9 @@ class UEF(PostRetrievalMethod):
             if old_col in df.columns:
                 df = df.rename(columns={old_col: new_col})
         
-        # Ensure doc_id is string type and strip any whitespace
+        # Ensure doc_id is string type and apply dataset-specific transformation
         if 'doc_id' in df.columns:
-            df['doc_id'] = df['doc_id'].astype(str).str.strip()
+            df['doc_id'] = df['doc_id'].astype(str).apply(self.dataset_config["run_doc_id_transform"])
         
         return df
 

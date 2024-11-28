@@ -8,6 +8,14 @@ import os
 import shutil
 from typing import Union, Dict
 from EvaluacionQPP.data.iquique_dataset import IquiqueDataset
+from EvaluacionQPP.evaluation.evaluator import DATASET_FORMATS
+
+def get_dataset_config(dataset):
+    """Get the appropriate dataset configuration"""
+    if isinstance(dataset, IquiqueDataset):
+        return DATASET_FORMATS["iquique_dataset"]
+    # Add more dataset type checks as needed
+    return DATASET_FORMATS["antique_test"]
 
 def perform_retrieval(index, queries_df, dataset, method='BM25'):  # {{ edit_1 }}
     """
@@ -21,23 +29,29 @@ def perform_retrieval(index, queries_df, dataset, method='BM25'):  # {{ edit_1 }
     Returns:
         retrieval_results: DataFrame with retrieval results.
     """
+    # Get dataset configuration
+    dataset_config = get_dataset_config(dataset)
+    
     if method == 'BM25':
         bm25 = pt.BatchRetrieve(index, wmodel='BM25')
         retrieval_results = bm25.transform(queries_df)
-        retrieval_results = retrieval_results.rename(columns={'score': 'docScore'})  # Rename here
-        retrieval_results['doc_id'] = retrieval_results['doc_id'].astype(str)  # {{ edit_1 }}
+        retrieval_results = retrieval_results.rename(columns={'score': 'docScore'})
+        # Apply document ID transformation
+        retrieval_results['docno'] = retrieval_results['docno'].astype(str).apply(dataset_config["doc_id_transform"])
         return retrieval_results
     elif method == 'QL':
         ql = pt.BatchRetrieve(index, wmodel='QL')
         retrieval_results = ql.transform(queries_df)
-        retrieval_results = retrieval_results.rename(columns={'score': 'docScore'})  # Rename here
-        retrieval_results['doc_id'] = retrieval_results['doc_id'].astype(str)  # {{ edit_1 }}
+        retrieval_results = retrieval_results.rename(columns={'score': 'docScore'})
+        # Apply document ID transformation
+        retrieval_results['docno'] = retrieval_results['docno'].astype(str).apply(dataset_config["doc_id_transform"])
         return retrieval_results
     elif method == 'RM':
         rm = pt.BatchRetrieve(index, wmodel='RM3')
         retrieval_results = rm.transform(queries_df)
-        retrieval_results = retrieval_results.rename(columns={'score': 'docScore'})  # Rename here
-        retrieval_results['doc_id'] = retrieval_results['doc_id'].astype(str)  # {{ edit_1 }}
+        retrieval_results = retrieval_results.rename(columns={'score': 'docScore'})
+        # Apply document ID transformation
+        retrieval_results['docno'] = retrieval_results['docno'].astype(str).apply(dataset_config["doc_id_transform"])
         return retrieval_results
     else:
         raise ValueError(f"Unknown retrieval method: {method}")
@@ -175,6 +189,9 @@ def get_batch_scores(
         text_getter = pt.text.get_text(dataset, "text")
         results = text_getter.transform(results)
     
+    # Get dataset configuration
+    dataset_config = get_dataset_config(dataset)
+    
     # Clean up column names first
     # Keep the first occurrence of each column name
     results = results.loc[:, ~results.columns.duplicated(keep='first')]
@@ -189,9 +206,8 @@ def get_batch_scores(
         if old_col in results.columns and new_col not in results.columns:
             results = results.rename(columns={old_col: new_col})
     
-    # Ensure docno is string type
-    if 'docno' in results.columns:
-        results['docno'] = results['docno'].astype(str)
+    # Apply document ID transformation based on dataset configuration
+    results['docno'] = results['docno'].astype(str).apply(dataset_config["doc_id_transform"])
     
     # Reset index to ensure proper ordering
     results = results.reset_index(drop=True)

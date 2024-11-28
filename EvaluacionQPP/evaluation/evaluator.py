@@ -24,8 +24,8 @@ DATASET_FORMATS = {
         "run_doc_id_transform": lambda x: x.replace('doc', '').split('_')[0]
     },
     "iquique_dataset": {
-        "doc_id_transform": lambda x: x,  # Keep as is
-        "needs_doc_prefix": True,  # Will add 'doc' prefix if not present
+        "doc_id_transform": lambda x: x if x.startswith('doc') else f"doc{x}",  # Ensure doc prefix
+        "needs_doc_prefix": True,
         "qrels_columns": {
             'qid': 'query_id',
             'docno': 'doc_id',
@@ -36,9 +36,8 @@ DATASET_FORMATS = {
             'docno': 'doc_id',
             'docScore': 'score'
         },
-        "run_doc_id_transform": lambda x: f"doc{x}"  # Add 'doc' prefix
+        "run_doc_id_transform": lambda x: x if x.startswith('doc') else f"doc{x}"  # Ensure consistent doc prefix
     }
-    # Add more dataset configurations as needed
 }
 
 def evaluate_results(
@@ -64,7 +63,18 @@ def evaluate_results(
     
     # Prepare qrels and run data using dataset-specific column mappings
     qrels = qrels.rename(columns=dataset_config["qrels_columns"])
-    run = run.rename(columns=dataset_config["run_columns"])
+    
+    # For run data, first ensure we have the right columns
+    if 'docno' in run.columns:
+        run = run.rename(columns={'docno': 'doc_id'})
+    elif 'docid' in run.columns:
+        run = run.rename(columns={'docid': 'doc_id'})
+    
+    if 'qid' in run.columns:
+        run = run.rename(columns={'qid': 'query_id'})
+    
+    if 'docScore' in run.columns:
+        run = run.rename(columns={'docScore': 'score'})
     
     print("\nDEBUG: After column renaming:")
     print("Qrels columns:", qrels.columns.tolist())
@@ -75,6 +85,7 @@ def evaluate_results(
     print("Sample qrels doc_ids:", qrels['doc_id'].head().tolist())
     print("Sample run doc_ids:", run['doc_id'].head().tolist())
     
+    # Apply document ID transformations based on dataset configuration
     qrels['doc_id'] = qrels['doc_id'].astype(str).apply(dataset_config["doc_id_transform"])
     run['doc_id'] = run['doc_id'].astype(str).apply(dataset_config["run_doc_id_transform"])
     
