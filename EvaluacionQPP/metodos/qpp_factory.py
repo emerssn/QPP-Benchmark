@@ -76,19 +76,52 @@ class QPPMethodFactory:
     
     def compute_all_scores(self, queries: Dict[str, str], **kwargs) -> Dict[str, Dict[str, float]]:
         """Compute scores for all available QPP methods."""
+        logger = logging.getLogger(__name__)
+        
+        # Get available query IDs from retrieval results
+        available_qids = set(self.retrieval_results['qid'].astype(str).unique())
+        input_qids = set(queries.keys())
+        
+        # Log query coverage
+        logger.info(
+            f"Processing queries: {len(input_qids)} input queries, "
+            f"{len(available_qids)} have retrieval results"
+        )
+        
+        missing_qids = input_qids - available_qids
+        if missing_qids:
+            logger.warning(
+                f"No retrieval results for {len(missing_qids)} queries: "
+                f"{sorted(missing_qids)[:5]}..."
+            )
+        
         # Convert queries dict to hashable tuple for caching
-        query_items = tuple(queries.items())
+        query_items = tuple((qid, queries[qid]) for qid in available_qids & input_qids)
         processed_queries = self.preprocess_queries(query_items)
+        
         scores = {}
         
-        # Compute pre-retrieval scores
-        for qid in queries:
+        # Initialize scores dict for all input queries
+        for qid in input_qids:
             scores[qid] = {
+                'idf_avg': 0.0,
+                'idf_max': 0.0,
+                'scq_avg': 0.0,
+                'scq_max': 0.0
+            }
+        
+        # Compute pre-retrieval scores for valid queries
+        valid_scores = {}
+        for qid in processed_queries:
+            valid_scores[qid] = {
                 'idf_avg': self.idf.compute_scores_batch(processed_queries, method='avg').get(qid, 0.0),
                 'idf_max': self.idf.compute_scores_batch(processed_queries, method='max').get(qid, 0.0),
                 'scq_avg': self.scq.compute_scores_batch(processed_queries, method='avg').get(qid, 0.0),
                 'scq_max': self.scq.compute_scores_batch(processed_queries, method='max').get(qid, 0.0)
             }
+        
+        # Update scores with valid results
+        scores.update(valid_scores)
         
         # Add post-retrieval scores if available
         if hasattr(self, 'wig'):
@@ -102,12 +135,10 @@ class QPPMethodFactory:
                 'clarity': self.clarity.compute_scores_batch(processed_queries)
             }
             
-            # Update scores dictionary
-            for qid in queries:
-                scores[qid].update({
-                    method: score_dict.get(qid, 0.0)
-                    for method, score_dict in post_retrieval_scores.items()
-                })
+            # Update scores dictionary for queries with retrieval results
+            for qid in input_qids:
+                for method, score_dict in post_retrieval_scores.items():
+                    scores[qid][method] = score_dict.get(qid, 0.0)
             
             # Add UEF scores if available
             if hasattr(self, 'uef'):
@@ -117,10 +148,16 @@ class QPPMethodFactory:
                     'uef_nqc': self.uef.compute_scores_batch(processed_queries, post_retrieval_scores['nqc'], list_size)
                 }
                 
-                for qid in queries:
-                    scores[qid].update({
-                        method: score_dict.get(qid, 0.0)
-                        for method, score_dict in uef_scores.items()
-                    })
+                for qid in input_qids:
+                    for method, score_dict in uef_scores.items():
+                        scores[qid][method] = score_dict.get(qid, 0.0)
+        
+        # Log summary statistics
+        non_zero_queries = sum(1 for qid in scores if any(v > 0 for v in scores[qid].values()))
+        logger.info(
+            f"Computed scores for {len(scores)} queries, "
+            f"{non_zero_queries} have non-zero scores "
+            f"({non_zero_queries/len(scores)*100:.1f}%)"
+        )
         
         return scores 
