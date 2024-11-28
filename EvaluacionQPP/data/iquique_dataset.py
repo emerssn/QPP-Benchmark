@@ -1,11 +1,10 @@
-from typing import Dict, Iterator, Any
 import pandas as pd
+from typing import Dict, Iterable
 
 class IquiqueDataset:
     """Un conjunto de datos sobre Iquique compatible con la interfaz de datasets de PyTerrier"""
-    
     def __init__(self):
-        # Documentos de muestra con docno y texto
+         # Documentos de muestra con docid y texto
         self.documents = {
             "doc0": "Iquique es una ciudad portuaria y comuna del norte de Chile, capital de la provincia homónima y de la región de Tarapacá",
             "doc1": "La Zona Franca de Iquique (ZOFRI) es uno de los centros comerciales más importantes del norte de Chile y Sudamérica",
@@ -17,7 +16,7 @@ class IquiqueDataset:
             "doc7": "El patrimonio cultural de Iquique incluye edificios históricos de la época salitrera y tradiciones pampinas"
         }
         
-        # Create a mapping for docno to internal ID (now using the same IDs)
+        # Create a mapping for doc_id to internal ID (now using the same IDs)
         self.docno_to_id = {k: k for k in self.documents.keys()}
         self.id_to_docno = self.docno_to_id
         
@@ -31,20 +30,20 @@ class IquiqueDataset:
         
         # Juicios de relevancia de muestra (qrels)
         self.qrels = pd.DataFrame([
-            {"qid": "0", "docno": "doc2", "relevance": 1},
-            {"qid": "1", "docno": "doc1", "relevance": 1},
-            {"qid": "2", "docno": "doc3", "relevance": 1},
-            {"qid": "2", "docno": "doc0", "relevance": 1},
-            {"qid": "3", "docno": "doc3", "relevance": 1},
-            {"qid": "3", "docno": "doc5", "relevance": 1},
-            {"qid": "3", "docno": "doc6", "relevance": 2},
-            {"qid": "3", "docno": "doc7", "relevance": 1}
+            {"qid": "0", "doc_id": "doc2", "relevance": 1},
+            {"qid": "1", "doc_id": "doc1", "relevance": 1},
+            {"qid": "2", "doc_id": "doc3", "relevance": 1},
+            {"qid": "2", "doc_id": "doc0", "relevance": 1},
+            {"qid": "3", "doc_id": "doc3", "relevance": 1},
+            {"qid": "3", "doc_id": "doc5", "relevance": 1},
+            {"qid": "3", "doc_id": "doc6", "relevance": 2},
+            {"qid": "3", "doc_id": "doc7", "relevance": 1}
         ])
-
-    def get_corpus_iter(self) -> Iterator[Dict[str, Any]]:
+    
+    def get_corpus_iter(self) -> Iterable[Dict[str, str]]:
         """Devuelve un iterador sobre la colección de documentos"""
-        for docno, text in self.documents.items():
-            yield {"docno": docno, "text": text}
+        for doc_id, text in self.documents.items():
+            yield {"doc_id": doc_id, "text": text}
 
     def get_topics(self) -> pd.DataFrame:
         """Devuelve los temas/consultas"""
@@ -59,11 +58,11 @@ class IquiqueDataset:
         return 'es'
 
     def get_topics_lang(self) -> str:
-        """Devuelve el código de idioma ISO 639-1 para los temas"""
+        """Devuelve el código de idioma ISO 639-1 para los temas/consultas"""
         return 'es'
 
     def info_url(self) -> str:
-        """Devuelve una URL que proporciona más información sobre este conjunto de datos"""
+        """Devuelve la URL con información adicional sobre el conjunto de datos"""
         return None
 
     def text_loader(self, metadata=None, verbose=False, **kwargs) -> Dict[str, str]:
@@ -75,5 +74,5 @@ class IquiqueDataset:
         return self.documents
 
     def map_docno(self, docno: str) -> str:
-        """Maps between internal and external document IDs"""
-        return docno  # Since we're using the same IDs now, just return the input
+        """Mapea un docno a un doc_id"""
+        return docno

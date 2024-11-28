@@ -64,17 +64,8 @@ def evaluate_results(
     # Prepare qrels and run data using dataset-specific column mappings
     qrels = qrels.rename(columns=dataset_config["qrels_columns"])
     
-    # For run data, first ensure we have the right columns
-    if 'docno' in run.columns:
-        run = run.rename(columns={'docno': 'doc_id'})
-    elif 'docid' in run.columns:
-        run = run.rename(columns={'docid': 'doc_id'})
-    
-    if 'qid' in run.columns:
-        run = run.rename(columns={'qid': 'query_id'})
-    
-    if 'docScore' in run.columns:
-        run = run.rename(columns={'docScore': 'score'})
+    # Rename run columns based on dataset configuration
+    run = run.rename(columns=dataset_config["run_columns"])
     
     print("\nDEBUG: After column renaming:")
     print("Qrels columns:", qrels.columns.tolist())

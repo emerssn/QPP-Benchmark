@@ -15,7 +15,7 @@ class UEF(PostRetrievalMethod):
         self.rm_results_df = self._clean_dataframe(self.rm_results_df)
         
         print("\nDEBUG - UEF initialization:")
-        print("Original results columns:", self.retrieval_results.columns.tolist())
+        print("Retrieval results columns:", self.retrieval_results.columns.tolist())
         print("RM results columns:", self.rm_results_df.columns.tolist())
     
     def _clean_dataframe(self, df):
@@ -30,9 +30,7 @@ class UEF(PostRetrievalMethod):
         }
         
         # Only rename columns that exist
-        for old_col, new_col in column_mapping.items():
-            if old_col in df.columns:
-                df = df.rename(columns={old_col: new_col})
+        df = df.rename(columns=column_mapping)
         
         # Ensure doc_id is string type and apply dataset-specific transformation
         if 'doc_id' in df.columns:
@@ -80,8 +78,7 @@ class UEF(PostRetrievalMethod):
                         print(f"\nNumber of common documents: {len(common_docs)}")
                         if len(common_docs) > 0:
                             print("First few common docs:", list(common_docs)[:5])
-                            print("\nScores for first common document:")
-                            first_doc = common_docs[0]
+                            first_doc = list(common_docs)[0]
                             print(f"Original score: {original_scores[first_doc]}")
                             print(f"RM score: {rm_scores[first_doc]}")
                     
@@ -133,5 +130,3 @@ class UEF(PostRetrievalMethod):
         except Exception as e:
             print(f"Error computing UEF score: {str(e)}")
             return 0.0
-
-

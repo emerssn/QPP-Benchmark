@@ -38,4 +38,4 @@ class DatasetProcessor:
 
     def iter_docs(self):
         for doc in self.dataset.get_corpus_iter():
-            yield doc['docno'], doc['text']
+            yield doc['doc_id'], doc['text']
