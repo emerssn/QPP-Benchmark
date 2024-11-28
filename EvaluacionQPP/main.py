@@ -63,9 +63,6 @@ def main():
             query_ids = list(queries.keys())[:args.max_queries]
             queries = {qid: queries[qid] for qid in query_ids}
         
-        print(f"\nProcessing {len(queries)} queries:")
-        for qid, query in queries.items():
-            print(f"  Query ID: {qid}, Query: {query}")
     except ValueError as e:
         print(f"Error getting queries: {e}")
         return
