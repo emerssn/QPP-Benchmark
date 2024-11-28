@@ -4,6 +4,9 @@ from typing import Dict
 from EvaluacionQPP.indexing.index_builder import IndexBuilder
 from EvaluacionQPP.utils.text_processing import preprocess_text
 from ..base import PostRetrievalMethod
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Clarity(PostRetrievalMethod):
     def __init__(self, index_builder, retrieval_results, results_df=None, dataset_name=None):
@@ -31,16 +34,37 @@ class Clarity(PostRetrievalMethod):
         return clarity_scores
 
     def compute_score(self, query_terms: list, topk_docs: pd.DataFrame) -> float:
-        """
-        Compute the Clarity score for a single query.
-        """
+        """Compute Clarity score with improved robustness"""
         if topk_docs.empty or not query_terms:
-            print(f"Warning: Empty docs or query terms. Docs shape: {topk_docs.shape}, Terms: {query_terms}")
+            logger.warning(f"Empty docs or query terms. Docs shape: {topk_docs.shape}, Terms: {query_terms}")
             return 0.0
 
-        # Compute term frequencies in top-k documents
+        # Filter out invalid documents
+        valid_docs = topk_docs[topk_docs['text'].notna()]
+        if valid_docs.empty:
+            logger.warning("No valid documents found after filtering")
+            return 0.0
+
+        # Compute term frequencies with error handling
+        try:
+            topk_term_freq = self._compute_term_frequencies(valid_docs)
+            if not topk_term_freq:
+                return 0.0
+                
+            total_terms = sum(topk_term_freq.values())
+            p_w_topk = {term: freq / total_terms for term, freq in topk_term_freq.items()}
+            p_w_collection = self._get_collection_probabilities(p_w_topk.keys())
+            
+            return self._calculate_kl_divergence(p_w_topk, p_w_collection)
+            
+        except Exception as e:
+            logger.error(f"Error computing Clarity score: {e}")
+            return 0.0
+
+    def _compute_term_frequencies(self, docs: pd.DataFrame) -> Dict[str, int]:
+        """Compute term frequencies with error handling"""
         topk_term_freq = {}
-        for text in topk_docs['text']:
+        for text in docs['text']:
             # Skip None or NaN values
             if pd.isna(text):
                 print(f"Warning: Found NaN text in document")
@@ -50,22 +74,15 @@ class Clarity(PostRetrievalMethod):
             for term in terms:
                 topk_term_freq[term] = topk_term_freq.get(term, 0) + 1
 
-        # If no valid terms were found, return 0
-        if not topk_term_freq:
-            print("Warning: No valid terms found in documents")
-            return 0.0
+        return topk_term_freq
 
-        #print(f"Number of unique terms found: {len(topk_term_freq)}")
-        
-        total_topk_terms = sum(topk_term_freq.values())
+    def _get_collection_probabilities(self, terms: list) -> Dict[str, float]:
+        """Get collection probabilities with error handling"""
+        p_w_collection = {term: self.index.term_cf.get(term, 0) / self.index.total_terms for term in terms}
+        return p_w_collection
 
-        # Compute P(w|D^k_{q,M})
-        p_w_topk = {term: freq / total_topk_terms for term, freq in topk_term_freq.items()}
-
-        # Compute P(w|D) using collection frequencies
-        p_w_collection = {term: self.index.term_cf.get(term, 0) / self.index.total_terms for term in p_w_topk.keys()}
-
-        # Compute Clarity score using KL-divergence
+    def _calculate_kl_divergence(self, p_w_topk: Dict[str, float], p_w_collection: Dict[str, float]) -> float:
+        """Calculate KL-divergence with error handling"""
         clarity = 0.0
         for term in p_w_topk:
             if p_w_collection[term] > 0 and p_w_topk[term] > 0:
