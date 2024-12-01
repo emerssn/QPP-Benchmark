@@ -125,11 +125,6 @@ def evaluate_results(
         elif metric.startswith('rr@'):
             metric_objects.append((metric, ir_measures.RR(rel=1)))
     
-    # Debug information
-    print(f"\nDebug - Number of queries in qrels: {len(valid_queries)}")
-    print(f"Debug - Number of documents in run: {len(run)}")
-    print(f"Debug - Relevance judgments distribution:\n{qrels['relevance'].value_counts()}")
-    
     # Create evaluator for all metrics
     evaluator = ir_measures.evaluator([m for _, m in metric_objects], qrels)
     all_results = list(evaluator.iter_calc(run))

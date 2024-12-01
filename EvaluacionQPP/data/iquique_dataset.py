@@ -45,6 +45,11 @@ class IquiqueDataset:
         for doc_id, text in self.documents.items():
             yield {"doc_id": doc_id, "text": text}
 
+    def iter_docs(self):
+        """Devuelve un iterador sobre los documentos en el formato (doc_id, text)"""
+        for doc_id, text in self.documents.items():
+            yield doc_id, text
+
     def get_topics(self) -> pd.DataFrame:
         """Devuelve los temas/consultas"""
         return self.topics
