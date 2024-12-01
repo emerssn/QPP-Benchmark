@@ -21,10 +21,23 @@ DATASET_FORMATS = {
             'docno': 'doc_id',
             'docScore': 'score'
         },
-        "run_doc_id_transform": lambda x: x.replace('doc', '').split('_')[0]
+        "run_doc_id_transform": lambda x: x.replace('doc', '').split('_')[0],
+        "relevance_levels": {
+            1: "Out of context/nonsensical",
+            2: "Not relevant but on topic",
+            3: "Marginally relevant",
+            4: "Highly relevant"
+        },
+        "binary_threshold": 3,  # Scores >= 3 are considered relevant for binary metrics
+        "gain_values": {  # Custom gain values for nDCG
+            1: 0.0,
+            2: 0.0,
+            3: 0.5,
+            4: 1.0
+        }
     },
     "iquique_dataset": {
-        "doc_id_transform": lambda x: x if x.startswith('doc') else f"doc{x}",  # Ensure doc prefix
+        "doc_id_transform": lambda x: x if x.startswith('doc') else f"doc{x}",
         "needs_doc_prefix": True,
         "qrels_columns": {
             'qid': 'query_id',
@@ -36,7 +49,18 @@ DATASET_FORMATS = {
             'docno': 'doc_id',
             'docScore': 'score'
         },
-        "run_doc_id_transform": lambda x: x if x.startswith('doc') else f"doc{x}"  # Ensure consistent doc prefix
+        "run_doc_id_transform": lambda x: x if x.startswith('doc') else f"doc{x}",
+        "relevance_levels": {
+            0: "Not Relevant",
+            1: "Relevant",
+            2: "Highly Relevant"
+        },
+        "binary_threshold": 1,  # Scores >= 1 are considered relevant for binary metrics
+        "gain_values": {  # Updated gain values for nDCG
+            0: 0,     # Not Relevant
+            1: 1,     # Relevant
+            2: 2      # Highly Relevant - using linear scale for better NDCG calculation
+        }
     }
 }
 
@@ -52,70 +76,80 @@ def evaluate_results(
     """
     dataset_config = DATASET_FORMATS.get(dataset_name, DATASET_FORMATS["antique_test"])
     
-    qrels = qrels_df.loc[:, ~qrels_df.columns.duplicated()]
-    run = results_df.loc[:, ~results_df.columns.duplicated()]
+    # Create copies of dataframes to avoid modifying originals
+    qrels = qrels_df.copy()
+    run = results_df.copy()
     
+    # Rename columns to match ir_measures expectations
     qrels = qrels.rename(columns=dataset_config["qrels_columns"])
     run = run.rename(columns=dataset_config["run_columns"])
     
+    # Transform document IDs
     qrels['doc_id'] = qrels['doc_id'].astype(str).apply(dataset_config["doc_id_transform"])
     run['doc_id'] = run['doc_id'].astype(str).apply(dataset_config["run_doc_id_transform"])
     
+    # Convert types
     qrels['query_id'] = qrels['query_id'].astype(str)
     qrels['doc_id'] = qrels['doc_id'].astype(str)
     qrels['relevance'] = qrels['relevance'].astype(int)
-    qrels['relevance'] = qrels['relevance'].clip(lower=0)
     
     run['query_id'] = run['query_id'].astype(str)
     run['doc_id'] = run['doc_id'].astype(str)
     run['score'] = run['score'].astype(float)
     
-    queries_with_qrels = set(qrels['query_id'].unique())
-    original_run_queries = set(run['query_id'].unique())
-    run = run[run['query_id'].isin(queries_with_qrels)]
-    
-    run = run.sort_values(['query_id', 'score'], ascending=[True, False])
+    # Filter out queries not in qrels
+    valid_queries = set(qrels['query_id'].unique())
+    run = run[run['query_id'].isin(valid_queries)]
     
     if run.empty:
-        print("\nWarning: No valid queries to evaluate after filtering!")
         return {metric: {'per_query': {}, 'mean': 0.0} for metric in metrics}
     
-    ir_metrics = []
+    # Sort results by score in descending order within each query
+    run = run.sort_values(['query_id', 'score'], ascending=[True, False])
+    
+    # Initialize metrics
+    results = {}
+    metric_objects = []
+    
+    # Create metric objects with appropriate parameters
     for metric in metrics:
         if metric.startswith('ndcg@'):
             k = int(metric.split('@')[1])
-            ir_metrics.append(ir_measures.nDCG(cutoff=k))
-        elif metric.startswith('p@') or metric.startswith('P@'):
-            k = int(metric.split('@')[1])
-            ir_metrics.append(ir_measures.P(cutoff=k))
+            metric_objects.append((metric, ir_measures.nDCG(cutoff=k)))
         elif metric.lower() in ['map', 'ap']:
-            ir_metrics.append(ir_measures.AP)
-        elif metric.startswith('rr@') or metric.startswith('RR@'):
-            ir_metrics.append(ir_measures.RR(rel=2))
-        elif metric.startswith('judged@'):
+            # Use explicit relevance threshold for MAP/AP
+            metric_objects.append((metric, ir_measures.AP(rel=1)))
+        elif metric.startswith('p@'):
             k = int(metric.split('@')[1])
-            ir_metrics.append(ir_measures.Judged(cutoff=k))
+            metric_objects.append((metric, ir_measures.P(cutoff=k, rel=1)))
+        elif metric.startswith('rr@'):
+            metric_objects.append((metric, ir_measures.RR(rel=1)))
     
-    evaluator = ir_measures.evaluator(ir_metrics, qrels)
-    query_results = list(evaluator.iter_calc(run))
+    # Debug information
+    print(f"\nDebug - Number of queries in qrels: {len(valid_queries)}")
+    print(f"Debug - Number of documents in run: {len(run)}")
+    print(f"Debug - Relevance judgments distribution:\n{qrels['relevance'].value_counts()}")
     
-    all_queries = set(qrels['query_id'].unique())
-    evaluated_queries = set(r.query_id for r in query_results)
-    missing_queries = all_queries - evaluated_queries
+    # Create evaluator for all metrics
+    evaluator = ir_measures.evaluator([m for _, m in metric_objects], qrels)
+    all_results = list(evaluator.iter_calc(run))
     
-    results = {}
-    for metric in metrics:
-        metric_results = [r for r in query_results if str(r.measure).lower() == metric.lower()]
+    # Process results for each metric
+    for metric_name, metric_obj in metric_objects:
+        metric_results = [r for r in all_results if str(r.measure).lower() == metric_name.lower()]
+        
+        # Debug information for each metric
+        print(f"\nDebug - {metric_name} results count: {len(metric_results)}")
         
         query_scores = {str(r.query_id): r.value for r in metric_results}
-        for qid in missing_queries:
-            query_scores[str(qid)] = 0.0
-            
-        results[metric] = {
+        
+        # For NDCG metrics, we let ir_measures handle the normalization
+        results[metric_name] = {
             'per_query': query_scores,
             'mean': np.mean(list(query_scores.values())) if query_scores else 0.0
         }
     
+    # Write results if output directory specified
     if output_dir:
         output_dir = ensure_dir(output_dir)
         with open(os.path.join(output_dir, 'evaluation_results.txt'), 'w') as f:
@@ -126,9 +160,6 @@ def evaluate_results(
                 f.write(f"Mean: {scores['mean']:.4f}\n")
                 f.write("Per-query results:\n")
                 for qid, score in sorted(scores['per_query'].items()):
-                    f.write(f"  Query {qid}: {score:.4f}")
-                    if qid in missing_queries:
-                        f.write(" (no relevant documents)")
-                    f.write("\n")
+                    f.write(f"  Query {qid}: {score:.4f}\n")
     
     return results 
