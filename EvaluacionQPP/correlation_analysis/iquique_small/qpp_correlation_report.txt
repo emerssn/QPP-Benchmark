@@ -1,0 +1,19 @@
+QPP Correlation Analysis Report
+==============================
+
+
+KENDALL Correlations:
+------------------------
+           ndcg@5   ndcg@10   ndcg@20
+idf_avg       0.4  0.182574  0.182574
+idf_max       NaN       NaN       NaN
+scq_avg       0.8  0.912871  0.912871
+scq_max       0.0 -0.182574 -0.182574
+wig      0.182574  0.333333  0.333333
+nqc     -0.547723       0.0       0.0
+clarity       0.4  0.182574  0.182574
+
+Summary Statistics:
+Best performing QPP method: scq_avg
+Most predictable metric: ndcg@10
+

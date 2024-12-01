@@ -1,0 +1,23 @@
+QPP Correlation Analysis Report
+==============================
+
+Metrics analyzed: nDCG@k and AP
+
+
+KENDALL Correlations:
+------------------------
+          ndcg@10        ap
+idf_avg   0.02831  0.063075
+idf_max -0.027262 -0.011657
+scq_avg  0.051986  0.038448
+scq_max -0.002167 -0.020113
+wig      0.129804  0.162525
+nqc      0.036066  0.057242
+clarity -0.003576 -0.058296
+uef_wig  0.062272  0.090932
+uef_nqc  0.045747  0.067809
+
+Summary Statistics:
+Best performing QPP method: wig
+Most predictable metric: ap
+
