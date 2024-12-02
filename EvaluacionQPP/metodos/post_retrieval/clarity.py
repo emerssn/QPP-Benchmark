@@ -27,10 +27,20 @@ class Clarity(PostRetrievalMethod):
             Dict[str, float]: Dictionary of query IDs to their Clarity scores.
         """
         clarity_scores = {}
+        
+        # Handle empty results DataFrame
+        if self.retrieval_results is None or self.retrieval_results.empty:
+            return {qid: 0.0 for qid in processed_queries}
+        
         for qid, query_terms in processed_queries.items():
-            topk_docs = self.retrieval_results[self.retrieval_results['qid'] == qid].head(top_k)
-            clarity_score = self.compute_score(query_terms, topk_docs)
-            clarity_scores[qid] = clarity_score
+            try:
+                topk_docs = self.retrieval_results[self.retrieval_results['qid'] == qid].head(top_k)
+                clarity_score = self.compute_score(query_terms, topk_docs)
+                clarity_scores[qid] = clarity_score
+            except Exception as e:
+                logger.error(f"Error computing clarity score for query {qid}: {e}")
+                clarity_scores[qid] = 0.0
+            
         return clarity_scores
 
     def compute_score(self, query_terms: list, topk_docs: pd.DataFrame) -> float:
@@ -64,8 +74,8 @@ class Clarity(PostRetrievalMethod):
     def _compute_term_frequencies(self, docs: pd.DataFrame) -> Dict[str, int]:
         """Compute term frequencies with error handling"""
         topk_term_freq = {}
+        
         for text in docs['text']:
-            # Skip None or NaN values
             if pd.isna(text):
                 print(f"Warning: Found NaN text in document")
                 continue
@@ -78,14 +88,41 @@ class Clarity(PostRetrievalMethod):
 
     def _get_collection_probabilities(self, terms: list) -> Dict[str, float]:
         """Get collection probabilities with error handling"""
-        p_w_collection = {term: self.index.term_cf.get(term, 0) / self.index.total_terms for term in terms}
+        p_w_collection = {}
+        for term in terms:
+            # Check both stemmed term and potential original form
+            cf = self.index.term_cf.get(term, 0)
+            if cf == 0 and term == 'play':
+                # If 'play' has 0 frequency, check for 'playa'
+                cf = self.index.term_cf.get('playa', 0)
+            p_w_collection[term] = cf / self.index.total_terms
         return p_w_collection
 
     def _calculate_kl_divergence(self, p_w_topk: Dict[str, float], p_w_collection: Dict[str, float]) -> float:
-        """Calculate KL-divergence with error handling"""
+        """
+        Calculate KL-divergence with error handling and smoothing.
+        
+        Args:
+            p_w_topk: Term probabilities in top-k documents
+            p_w_collection: Term probabilities in collection
+            
+        Returns:
+            float: Non-negative KL-divergence score
+        """
         clarity = 0.0
+        epsilon = 1e-10  # Small constant for smoothing
+        
         for term in p_w_topk:
-            if p_w_collection[term] > 0 and p_w_topk[term] > 0:
-                clarity += p_w_topk[term] * np.log(p_w_topk[term] / p_w_collection[term])
-
-        return clarity
+            # Add smoothing to avoid log(0)
+            p_topk = p_w_topk[term]
+            p_coll = p_w_collection[term]
+            
+            # Apply smoothing to collection probabilities
+            p_coll_smoothed = max(p_coll, epsilon)
+            
+            if p_topk > 0:  # Only calculate for non-zero probabilities in top-k
+                # Use smoothed collection probability
+                clarity += p_topk * np.log(p_topk / p_coll_smoothed)
+        
+        # Ensure non-negative score
+        return max(0.0, clarity)

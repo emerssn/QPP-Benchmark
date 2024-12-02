@@ -5,25 +5,24 @@ import json
 class IDF(PreRetrievalMethod):
     def __init__(self, index):
         super().__init__(index)
-        self.total_docs = self.index.getCollectionStatistics().getNumberOfDocuments()
-        
-        # Load term frequencies from meta index
-        meta_index = self.index.getMetaIndex()
-        last_doc_id = self.total_docs - 1
-        
-        try:
-            term_df_str = meta_index.getItem("term_df", last_doc_id)
-            self.term_df = json.loads(term_df_str) if term_df_str else {}
-        except:
-            print("Warning: Could not load term_df from metadata, falling back to lexicon")
+        if hasattr(index, 'term_df'):
+            # If we're passed an IndexBuilder, use its statistics
+            self.term_df = index.term_df
+            self.total_docs = index.total_docs
+            self.index_builder = index
+            self.index = index.index  # Get PyTerrier index for fallback
+        else:
+            # Otherwise, load from PyTerrier index
+            self.index_builder = None
+            self.index = index
+            self.total_docs = index.getCollectionStatistics().getNumberOfDocuments()
             self.term_df = {}
             # Build term_df from lexicon
-            lexicon = self.index.getLexicon()
-            iterator = lexicon.iterator()
-            entry = iterator.next()
-            while entry is not None:
-                self.term_df[entry.getKey()] = entry.getDocumentFrequency()
-                entry = iterator.next()
+            lexicon = index.getLexicon()
+            for entry in lexicon:
+                term = entry.getKey()
+                stats = entry.getValue()
+                self.term_df[term] = stats.getDocumentFrequency()
 
     def compute_score(self, query_terms, method='avg', **kwargs):
         """
@@ -61,14 +60,19 @@ class IDF(PreRetrievalMethod):
 
     def _get_term_df(self, term):
         """Get document frequency for a term."""
+        # First try our tracked statistics
         if term in self.term_df:
             return self.term_df[term]
+        
+        # If we have an index builder, try its statistics
+        if self.index_builder and term in self.index_builder.term_df:
+            return self.index_builder.term_df[term]
         
         # Fallback to lexicon lookup
         lexicon = self.index.getLexicon()
         lex_entry = lexicon.getLexiconEntry(term)
         if lex_entry is not None:
-            df = lex_entry.getDocumentFrequency()
+            df = lex_entry.getValue().getDocumentFrequency()
             # Cache the result
             self.term_df[term] = df
             return df

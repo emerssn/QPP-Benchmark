@@ -67,10 +67,14 @@ class WIG(PostRetrievalMethod):
         if self.results_df is None or self.results_df.empty:
             print(f"No retrieval results available for Query ID: {query_id}")
             return 0.0
+
         self.scores_vec = self._init_scores_vec(query_id, list_size_param)
-        #print(f"Scores Vector for Query {query_id}: {self.scores_vec}")
+        
+        # If we got a zero score vector for invalid query, return 0
+        if len(self.scores_vec) == 1 and self.scores_vec[0] == 0.0:
+            return 0.0
+        
         self.ql_corpus_score = self._calc_corpus_score()
-        #print(f"Corpus Score for Query {query_id}: {self.ql_corpus_score}")
         return self.calc_wig(list_size_param)
 
     def calc_wig(self, list_size_param):

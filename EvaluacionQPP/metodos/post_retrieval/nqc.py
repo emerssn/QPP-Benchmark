@@ -77,14 +77,18 @@ class NQC(PostRetrievalMethod):
         Returns:
             float: The NQC score.
         """
-        self.query_terms = query_terms  # Set 'query_terms' before using them
+        self.query_terms = query_terms
         if self.results_df is None or self.results_df.empty:
             print(f"No retrieval results available for Query ID: {query_id}")
             return 0.0
+
         self.scores_vec = self._init_scores_vec(query_id, list_size_param)
-        #print(f"Scores Vector for Query {query_id}: {self.scores_vec}") 
+        
+        # If we got a zero score vector for invalid query, return 0
+        if len(self.scores_vec) == 1 and self.scores_vec[0] == 0.0:
+            return 0.0
+        
         self.ql_corpus_score = self._calc_corpus_score()
-        #print(f"Corpus Score for Query {query_id}: {self.ql_corpus_score}") 
         return self.calc_nqc(list_size_param)
 
     
@@ -105,15 +109,12 @@ class NQC(PostRetrievalMethod):
             print("Corpus score is zero; returning NQC score as 0.0 to avoid division by zero.")
             return 0.0
 
-        epsilon = 1e-8
+        # Remove epsilon handling since we now catch zero scores earlier
         std_dev = np.std(scores_vec)
         if std_dev == 0.0:
-            print("Standard deviation is zero; adding epsilon to NQC score.")
-            nqc_score = epsilon / abs(self.ql_corpus_score)
-        else:
-            nqc_score = std_dev / abs(self.ql_corpus_score)
+            return 0.0
         
-        #print(f"Calculated NQC score: {nqc_score}")
+        nqc_score = std_dev / abs(self.ql_corpus_score)
         return nqc_score
 
     def compute_scores_batch(self, queries_terms_dict, list_size_param=10):

@@ -41,8 +41,8 @@ class QPPMethodFactory:
     def _init_methods(self):
         """Initialize all QPP methods."""
         # Pre-retrieval methods
-        self.idf = IDF(self.index)
-        self.scq = SCQ(self.index)
+        self.idf = IDF(self.index_builder)
+        self.scq = SCQ(self.index_builder)
         
         # Post-retrieval methods (only if results are available)
         if self.retrieval_results is not None:

@@ -68,6 +68,10 @@ def perform_retrieval(index, queries_df, dataset, method='BM25'):
                 wmodel=method,
                 controls=retrieval_params['controls'].get(method, {}),
                 num_results=retrieval_params['num_results'],
+                properties={
+                    "terrier.matching.documents.fields": "text",  # Use our preprocessed text field
+                    "termpipelines": ""  # Disable additional processing since text is already preprocessed
+                },
                 verbose=True
             )
         else:

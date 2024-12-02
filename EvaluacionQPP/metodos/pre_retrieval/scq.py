@@ -5,20 +5,53 @@ import json
 class SCQ(PreRetrievalMethod):
     def __init__(self, index):
         super().__init__(index)
-        self.total_docs = self.index.getCollectionStatistics().getNumberOfDocuments()
-        
-        meta_index = self.index.getMetaIndex()
-        last_doc_id = self.total_docs - 1
-        
-        try:
-            term_df_str = meta_index.getItem("term_df", last_doc_id)
-            term_cf_str = meta_index.getItem("term_cf", last_doc_id)
-            self.term_df = json.loads(term_df_str) if term_df_str else {}
-            self.term_cf = json.loads(term_cf_str) if term_cf_str else {}
-        except:
-            print("Warning: Could not load term statistics from metadata. SCQ calculations may be inaccurate.")
+        if hasattr(index, 'term_df'):
+            # If we're passed an IndexBuilder, use its statistics
+            self.term_df = index.term_df
+            self.term_cf = index.term_cf
+            self.total_docs = index.total_docs
+            self.total_terms = index.total_terms
+            self.index_builder = index
+            self.index = index.index  # Get PyTerrier index for fallback
+        else:
+            # Otherwise, load from PyTerrier index
+            self.index_builder = None
+            self.index = index
+            self.total_docs = index.getCollectionStatistics().getNumberOfDocuments()
+            self.total_terms = index.getCollectionStatistics().getNumberOfTokens()
             self.term_df = {}
             self.term_cf = {}
+            # Build term statistics from lexicon
+            lexicon = index.getLexicon()
+            for entry in lexicon:
+                term = entry.getKey()
+                stats = entry.getValue()
+                self.term_df[term] = stats.getDocumentFrequency()
+                self.term_cf[term] = stats.getFrequency()
+
+    def _get_term_stats(self, term):
+        """Get document frequency and collection frequency for a term."""
+        # First try our tracked statistics
+        if term in self.term_df and term in self.term_cf:
+            return self.term_df[term], self.term_cf[term]
+        
+        # If we have an index builder, try its statistics
+        if self.index_builder and term in self.index_builder.term_df:
+            return (self.index_builder.term_df[term], 
+                   self.index_builder.term_cf[term])
+        
+        # Fallback to lexicon lookup
+        lexicon = self.index.getLexicon()
+        lex_entry = lexicon.getLexiconEntry(term)
+        if lex_entry is not None:
+            stats = lex_entry.getValue()
+            df = stats.getDocumentFrequency()
+            cf = stats.getFrequency()
+            # Cache the results
+            self.term_df[term] = df
+            self.term_cf[term] = cf
+            return df, cf
+        return 0, 0
 
     def compute_score(self, query_terms, method='avg', **kwargs):
         """
@@ -52,20 +85,7 @@ class SCQ(PreRetrievalMethod):
         raw_scores = []
         
         for term in terms:
-            if term in self.term_cf and term in self.term_df:
-                cf = self.term_cf[term]
-                df = self.term_df[term]
-            else:
-                # Fallback to using the index's lexicon
-                lexicon = self.index.getLexicon()
-                lex_entry = lexicon.getLexiconEntry(term)
-                if lex_entry is not None:
-                    cf = lex_entry.getFrequency()
-                    df = lex_entry.getDocumentFrequency()
-                else:
-                    cf = 0
-                    df = 0
-            
+            df, cf = self._get_term_stats(term)
             if cf > 0 and df > 0:
                 score = (1 + np.log(cf)) * np.log(1 + self.total_docs / df)
                 raw_scores.append(score)
