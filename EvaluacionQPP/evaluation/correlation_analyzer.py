@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import Dict, List, Union, Optional
 import logging
-from ..utils.file_utils import ensure_dir
 import os
+from ..utils.file_utils import ensure_dir
 
 class QPPCorrelationAnalyzer:
     """
@@ -24,8 +24,15 @@ class QPPCorrelationAnalyzer:
             retrieval_metrics: Dictionary of retrieval metrics {metric: {per_query: {qid: score}, mean: float}}
                              Only nDCG and AP metrics are supported
             output_dir: Directory to save results and plots
+        
+        Raises:
+            ValueError: If qpp_scores is empty or retrieval_metrics contains no valid metrics
         """
         self.logger = logging.getLogger(__name__)
+        
+        # Validate input data
+        if not qpp_scores:
+            raise ValueError("QPP scores dictionary cannot be empty")
         
         # Validate metrics - only allow nDCG and AP
         valid_metrics = {k: v for k, v in retrieval_metrics.items() 
