@@ -1,0 +1,133 @@
+Informe de Pruebas
+==================
+
+Fecha de Ejecución: 2024-12-02 03:59:24
+Duración Total: 0:00:11.265284
+
+Resumen:
+- Total de pruebas ejecutadas: 50
+- Pruebas exitosas: 50
+- Pruebas fallidas: 0
+
+Detalles por Clase de Prueba:
+-----------------------------
+
+Clase: TestQPPCorrelationAnalyzer
+- Pruebas ejecutadas: 10
+- Pruebas exitosas: 10
+- Pruebas fallidas: 0
+- Tiempo de ejecución: 8.25 segundos
+
+Casos de prueba:
+✓ test_align_qids (0.001s)
+✓ test_align_qids_with_iquique_dataset (0.002s)
+✓ test_calculate_correlations (0.056s)
+✓ test_edge_cases (0.002s)
+✓ test_generate_report (3.705s)
+✓ test_initialization (0.000s)
+✓ test_plot_correlation_heatmap (0.621s)
+✓ test_plot_correlations_across_datasets (0.290s)
+✓ test_plot_correlations_boxplot (0.588s)
+✓ test_plot_scatter_plots (2.984s)
+
+--------------------------------------------------
+
+Clase: TestEvaluator
+- Pruebas ejecutadas: 6
+- Pruebas exitosas: 6
+- Pruebas fallidas: 0
+- Tiempo de ejecución: 0.05 segundos
+
+Casos de prueba:
+✓ test_invalid_queries (0.008s)
+✓ test_multiple_metrics (0.014s)
+✓ test_perfect_ap (0.008s)
+✓ test_perfect_ndcg (0.008s)
+✓ test_reversed_ap (0.008s)
+✓ test_reversed_ndcg (0.008s)
+
+--------------------------------------------------
+
+Clase: TestClarity
+- Pruebas ejecutadas: 8
+- Pruebas exitosas: 8
+- Pruebas fallidas: 0
+- Tiempo de ejecución: 0.03 segundos
+
+Casos de prueba:
+✓ test_calculate_kl_divergence (0.000s)
+✓ test_compute_score (0.005s)
+✓ test_compute_scores_batch (0.009s)
+✓ test_compute_term_frequencies (0.001s)
+✓ test_edge_cases (0.009s)
+✓ test_get_collection_probabilities (0.005s)
+✓ test_stemming_consistency (0.004s)
+✓ test_term_cf_presence (0.000s)
+
+--------------------------------------------------
+
+Clase: TestNQC
+- Pruebas ejecutadas: 6
+- Pruebas exitosas: 6
+- Pruebas fallidas: 0
+- Tiempo de ejecución: 0.01 segundos
+
+Casos de prueba:
+✓ test_calc_corpus_score (0.001s)
+✓ test_calc_nqc (0.000s)
+✓ test_compute_score (0.002s)
+✓ test_compute_scores_batch (0.003s)
+✓ test_edge_cases (0.001s)
+✓ test_init_scores_vec (0.001s)
+
+--------------------------------------------------
+
+Clase: TestWIG
+- Pruebas ejecutadas: 7
+- Pruebas exitosas: 7
+- Pruebas fallidas: 0
+- Tiempo de ejecución: 0.01 segundos
+
+Casos de prueba:
+✓ test_calc_corpus_score (0.001s)
+✓ test_calc_wig (0.000s)
+✓ test_compute_score (0.002s)
+✓ test_compute_scores_batch (0.002s)
+✓ test_edge_cases (0.001s)
+✓ test_get_term_cf (0.000s)
+✓ test_init_scores_vec (0.001s)
+
+--------------------------------------------------
+
+Clase: TestIDF
+- Pruebas ejecutadas: 7
+- Pruebas exitosas: 7
+- Pruebas fallidas: 0
+- Tiempo de ejecución: 0.01 segundos
+
+Casos de prueba:
+✓ test_compute_score_empty_query (0.000s)
+✓ test_compute_score_invalid_method (0.001s)
+✓ test_compute_score_multiple_terms (0.001s)
+✓ test_compute_score_single_term (0.001s)
+✓ test_compute_score_unknown_term (0.000s)
+✓ test_compute_scores_batch (0.003s)
+✓ test_get_term_df (0.000s)
+
+--------------------------------------------------
+
+Clase: TestSCQ
+- Pruebas ejecutadas: 6
+- Pruebas exitosas: 6
+- Pruebas fallidas: 0
+- Tiempo de ejecución: 0.01 segundos
+
+Casos de prueba:
+✓ test_compute_score_empty_query (0.000s)
+✓ test_compute_score_invalid_method (0.000s)
+✓ test_compute_score_multiple_terms (0.001s)
+✓ test_compute_score_single_term (0.002s)
+✓ test_compute_score_unknown_term (0.000s)
+✓ test_compute_scores_batch (0.007s)
+
+--------------------------------------------------

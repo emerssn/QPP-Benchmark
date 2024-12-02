@@ -12,10 +12,8 @@ idf_max -0.027262 -0.011657
 scq_avg  0.051986  0.038448
 scq_max -0.002167 -0.020113
 wig      0.129804  0.162525
-nqc      0.036066  0.057242
-clarity -0.003576 -0.058296
-uef_wig  0.062272  0.090932
-uef_nqc  0.045747  0.067809
+nqc      0.035868  0.057047
+clarity  0.067446  0.080609
 
 Summary Statistics:
 Best performing QPP method: wig

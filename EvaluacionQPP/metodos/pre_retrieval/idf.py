@@ -52,9 +52,9 @@ class IDF(PreRetrievalMethod):
             return 0.0
             
         if method == 'max':
-            return max(idfs)
+            return max(0.0, max(idfs))
         elif method == 'avg':
-            return np.mean(idfs)
+            return max(0.0, np.mean(idfs))
         else:
             raise ValueError("Invalid method. Choose 'max' or 'avg'.")
 

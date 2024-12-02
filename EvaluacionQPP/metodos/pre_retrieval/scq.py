@@ -67,11 +67,11 @@ class SCQ(PreRetrievalMethod):
         raw_scq_scores = self._calc_raw_scq(query_terms)
         
         if method == 'max':
-            return self.calc_max_scq(raw_scq_scores)
+            return max(0.0, self.calc_max_scq(raw_scq_scores))
         elif method == 'avg':
-            return self.calc_avg_scq(raw_scq_scores)
+            return max(0.0, self.calc_avg_scq(raw_scq_scores))
         elif method == 'sum':
-            return self.calc_scq(raw_scq_scores)
+            return max(0.0, self.calc_scq(raw_scq_scores))
         else:
             raise ValueError("Invalid method. Choose 'max', 'avg', or 'sum'.")
 

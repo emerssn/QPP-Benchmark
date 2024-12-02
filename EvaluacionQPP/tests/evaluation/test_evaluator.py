@@ -1,8 +1,8 @@
 import unittest
 import pandas as pd
 import numpy as np
-from ...evaluation.evaluator import evaluate_results
-from ...data.iquique_dataset import IquiqueDataset
+from EvaluacionQPP.evaluation.evaluator import evaluate_results
+from EvaluacionQPP.data.iquique_dataset import IquiqueDataset
 
 class TestEvaluator(unittest.TestCase):
     def setUp(self):

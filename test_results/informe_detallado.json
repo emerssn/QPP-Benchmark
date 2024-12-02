@@ -1,0 +1,372 @@
+{
+  "fecha_ejecucion": "2024-12-02 03:59:24",
+  "duracion_total": "0:00:11.265284",
+  "total_pruebas": 50,
+  "pruebas_exitosas": 50,
+  "pruebas_fallidas": 0,
+  "detalles_por_clase": [
+    {
+      "test_name": "TestQPPCorrelationAnalyzer",
+      "total_tests": 10,
+      "passed_tests": 10,
+      "failed_tests": 0,
+      "execution_time": 8.249165296554565,
+      "test_cases": [
+        {
+          "name": "test_align_qids",
+          "passed": true,
+          "execution_time": 0.0012750625610351562,
+          "details": {}
+        },
+        {
+          "name": "test_align_qids_with_iquique_dataset",
+          "passed": true,
+          "execution_time": 0.0016951560974121094,
+          "details": {}
+        },
+        {
+          "name": "test_calculate_correlations",
+          "passed": true,
+          "execution_time": 0.05645608901977539,
+          "details": {}
+        },
+        {
+          "name": "test_edge_cases",
+          "passed": true,
+          "execution_time": 0.002073049545288086,
+          "details": {}
+        },
+        {
+          "name": "test_generate_report",
+          "passed": true,
+          "execution_time": 3.705460786819458,
+          "details": {}
+        },
+        {
+          "name": "test_initialization",
+          "passed": true,
+          "execution_time": 0.00010609626770019531,
+          "details": {}
+        },
+        {
+          "name": "test_plot_correlation_heatmap",
+          "passed": true,
+          "execution_time": 0.620560884475708,
+          "details": {}
+        },
+        {
+          "name": "test_plot_correlations_across_datasets",
+          "passed": true,
+          "execution_time": 0.2895059585571289,
+          "details": {}
+        },
+        {
+          "name": "test_plot_correlations_boxplot",
+          "passed": true,
+          "execution_time": 0.588329553604126,
+          "details": {}
+        },
+        {
+          "name": "test_plot_scatter_plots",
+          "passed": true,
+          "execution_time": 2.9837026596069336,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "test_name": "TestEvaluator",
+      "total_tests": 6,
+      "passed_tests": 6,
+      "failed_tests": 0,
+      "execution_time": 0.05306196212768555,
+      "test_cases": [
+        {
+          "name": "test_invalid_queries",
+          "passed": true,
+          "execution_time": 0.007917642593383789,
+          "details": {}
+        },
+        {
+          "name": "test_multiple_metrics",
+          "passed": true,
+          "execution_time": 0.013939380645751953,
+          "details": {}
+        },
+        {
+          "name": "test_perfect_ap",
+          "passed": true,
+          "execution_time": 0.007790803909301758,
+          "details": {}
+        },
+        {
+          "name": "test_perfect_ndcg",
+          "passed": true,
+          "execution_time": 0.007643222808837891,
+          "details": {}
+        },
+        {
+          "name": "test_reversed_ap",
+          "passed": true,
+          "execution_time": 0.007641315460205078,
+          "details": {}
+        },
+        {
+          "name": "test_reversed_ndcg",
+          "passed": true,
+          "execution_time": 0.008129596710205078,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "test_name": "TestClarity",
+      "total_tests": 8,
+      "passed_tests": 8,
+      "failed_tests": 0,
+      "execution_time": 0.033733367919921875,
+      "test_cases": [
+        {
+          "name": "test_calculate_kl_divergence",
+          "passed": true,
+          "execution_time": 0.00017309188842773438,
+          "details": {}
+        },
+        {
+          "name": "test_compute_score",
+          "passed": true,
+          "execution_time": 0.0049893856048583984,
+          "details": {}
+        },
+        {
+          "name": "test_compute_scores_batch",
+          "passed": true,
+          "execution_time": 0.009451866149902344,
+          "details": {}
+        },
+        {
+          "name": "test_compute_term_frequencies",
+          "passed": true,
+          "execution_time": 0.0014903545379638672,
+          "details": {}
+        },
+        {
+          "name": "test_edge_cases",
+          "passed": true,
+          "execution_time": 0.008946418762207031,
+          "details": {}
+        },
+        {
+          "name": "test_get_collection_probabilities",
+          "passed": true,
+          "execution_time": 0.005031585693359375,
+          "details": {}
+        },
+        {
+          "name": "test_stemming_consistency",
+          "passed": true,
+          "execution_time": 0.0035774707794189453,
+          "details": {}
+        },
+        {
+          "name": "test_term_cf_presence",
+          "passed": true,
+          "execution_time": 7.319450378417969e-05,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "test_name": "TestNQC",
+      "total_tests": 6,
+      "passed_tests": 6,
+      "failed_tests": 0,
+      "execution_time": 0.008692026138305664,
+      "test_cases": [
+        {
+          "name": "test_calc_corpus_score",
+          "passed": true,
+          "execution_time": 0.0013785362243652344,
+          "details": {}
+        },
+        {
+          "name": "test_calc_nqc",
+          "passed": true,
+          "execution_time": 0.0003936290740966797,
+          "details": {}
+        },
+        {
+          "name": "test_compute_score",
+          "passed": true,
+          "execution_time": 0.001821279525756836,
+          "details": {}
+        },
+        {
+          "name": "test_compute_scores_batch",
+          "passed": true,
+          "execution_time": 0.0028772354125976562,
+          "details": {}
+        },
+        {
+          "name": "test_edge_cases",
+          "passed": true,
+          "execution_time": 0.0011746883392333984,
+          "details": {}
+        },
+        {
+          "name": "test_init_scores_vec",
+          "passed": true,
+          "execution_time": 0.0010466575622558594,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "test_name": "TestWIG",
+      "total_tests": 7,
+      "passed_tests": 7,
+      "failed_tests": 0,
+      "execution_time": 0.007356882095336914,
+      "test_cases": [
+        {
+          "name": "test_calc_corpus_score",
+          "passed": true,
+          "execution_time": 0.0005550384521484375,
+          "details": {}
+        },
+        {
+          "name": "test_calc_wig",
+          "passed": true,
+          "execution_time": 0.00022339820861816406,
+          "details": {}
+        },
+        {
+          "name": "test_compute_score",
+          "passed": true,
+          "execution_time": 0.0017168521881103516,
+          "details": {}
+        },
+        {
+          "name": "test_compute_scores_batch",
+          "passed": true,
+          "execution_time": 0.002171754837036133,
+          "details": {}
+        },
+        {
+          "name": "test_edge_cases",
+          "passed": true,
+          "execution_time": 0.0014531612396240234,
+          "details": {}
+        },
+        {
+          "name": "test_get_term_cf",
+          "passed": true,
+          "execution_time": 0.00033283233642578125,
+          "details": {}
+        },
+        {
+          "name": "test_init_scores_vec",
+          "passed": true,
+          "execution_time": 0.0009038448333740234,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "test_name": "TestIDF",
+      "total_tests": 7,
+      "passed_tests": 7,
+      "failed_tests": 0,
+      "execution_time": 0.006230354309082031,
+      "test_cases": [
+        {
+          "name": "test_compute_score_empty_query",
+          "passed": true,
+          "execution_time": 9.584426879882812e-05,
+          "details": {}
+        },
+        {
+          "name": "test_compute_score_invalid_method",
+          "passed": true,
+          "execution_time": 0.0010991096496582031,
+          "details": {}
+        },
+        {
+          "name": "test_compute_score_multiple_terms",
+          "passed": true,
+          "execution_time": 0.0009818077087402344,
+          "details": {}
+        },
+        {
+          "name": "test_compute_score_single_term",
+          "passed": true,
+          "execution_time": 0.0005352497100830078,
+          "details": {}
+        },
+        {
+          "name": "test_compute_score_unknown_term",
+          "passed": true,
+          "execution_time": 0.0004673004150390625,
+          "details": {}
+        },
+        {
+          "name": "test_compute_scores_batch",
+          "passed": true,
+          "execution_time": 0.0025758743286132812,
+          "details": {}
+        },
+        {
+          "name": "test_get_term_df",
+          "passed": true,
+          "execution_time": 0.00047516822814941406,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "test_name": "TestSCQ",
+      "total_tests": 6,
+      "passed_tests": 6,
+      "failed_tests": 0,
+      "execution_time": 0.0098114013671875,
+      "test_cases": [
+        {
+          "name": "test_compute_score_empty_query",
+          "passed": true,
+          "execution_time": 0.0001201629638671875,
+          "details": {}
+        },
+        {
+          "name": "test_compute_score_invalid_method",
+          "passed": true,
+          "execution_time": 0.0003018379211425781,
+          "details": {}
+        },
+        {
+          "name": "test_compute_score_multiple_terms",
+          "passed": true,
+          "execution_time": 0.0006356239318847656,
+          "details": {}
+        },
+        {
+          "name": "test_compute_score_single_term",
+          "passed": true,
+          "execution_time": 0.0017483234405517578,
+          "details": {}
+        },
+        {
+          "name": "test_compute_score_unknown_term",
+          "passed": true,
+          "execution_time": 0.00025391578674316406,
+          "details": {}
+        },
+        {
+          "name": "test_compute_scores_batch",
+          "passed": true,
+          "execution_time": 0.006751537322998047,
+          "details": {}
+        }
+      ]
+    }
+  ]
+}
