@@ -16,97 +16,90 @@ class IndexBuilder:
         self.dataset_name = dataset_name
 
     def build_index(self, base_index_path):
-        # base_index_path already includes the dataset name, so don't add it again
         os.makedirs(base_index_path, exist_ok=True)
         
-        # Ensure PyTerrier is initialized
         if not pt.started():
             pt.init()
 
-        # Create an indexer with only 'docno' and 'text' as metadata
+        # Basic indexer configuration
         indexer = pt.IterDictIndexer(base_index_path)
         indexer.setProperty("terrier.index.meta.forward.keys", "docno,text")
         indexer.setProperty("terrier.index.meta.forward.keylens", "20,100000")
-
-        # Prepare documents for indexing
+        
+        # Track term frequencies during indexing
+        term_stats = {}
+        
         def doc_iterator():
             iterator = self.dataset.iter_docs()
-            try:
-                prev_doc = next(iterator)
-            except StopIteration:
-                return
-            
             for doc_id, doc_text in iterator:
-                processed_text = preprocess_text(doc_text)
+                # Track term frequencies using our preprocessor
+                terms = preprocess_text(doc_text, dataset_name=self.dataset_name)
+                
+                # Track term frequencies
+                for term in terms:
+                    if term not in term_stats:
+                        term_stats[term] = {'df': 0, 'cf': 0}
+                    term_stats[term]['cf'] += 1
+                    
+                # Track document frequencies (unique terms per doc)
+                for term in set(terms):
+                    term_stats[term]['df'] += 1
+                
                 self.total_docs += 1
                 
+                # Pass preprocessed text for indexing
+                processed_text = ' '.join(terms)
                 yield {
-                    'docno': str(prev_doc[0]),
-                    'text': ' '.join(processed_text),
+                    'docno': str(doc_id),
+                    'text': processed_text,
                 }
-                
-                prev_doc = (doc_id, doc_text)
 
-            # Handle last document
-            processed_text = preprocess_text(prev_doc[1])
-            self.total_docs += 1
-            
-            yield {
-                'docno': str(prev_doc[0]),
-                'text': ' '.join(processed_text),
-            }
-
-        # Index the documents
+        # Build index
         index_ref = indexer.index(doc_iterator())
         index = pt.IndexFactory.of(index_ref)
         self.index = index
         
-        # Load statistics from Terrier's index after indexing is complete
-        self._load_statistics_from_index()
+        # Store our tracked statistics
+        self.term_df = {term: stats['df'] for term, stats in term_stats.items()}
+        self.term_cf = {term: stats['cf'] for term, stats in term_stats.items()}
+        self.total_terms = sum(self.term_cf.values())
         
         return index
 
     def _load_statistics_from_index(self):
         """Load term statistics directly from Terrier's index"""
-        self.term_df = {}
-        self.term_cf = {}
-        self.total_docs = self.index.getCollectionStatistics().getNumberOfDocuments()
-        self.total_terms = self.index.getCollectionStatistics().getNumberOfTokens()
-        
-        # Load term statistics from Terrier's lexicon
-        lexicon = self.index.getLexicon()
-        for entry in lexicon:
-            term = entry.getKey()
-            self.term_df[term] = entry.getValue().getDocumentFrequency()
-            self.term_cf[term] = entry.getValue().getFrequency()
+        # Use our tracked statistics instead of loading from index
+        if not self.term_df or not self.term_cf:
+            self.term_df = {}
+            self.term_cf = {}
+            self.total_docs = self.index.getCollectionStatistics().getNumberOfDocuments()
+            self.total_terms = self.index.getCollectionStatistics().getNumberOfTokens()
+            
+            # Load lexicon entries
+            lexicon = self.index.getLexicon()
+            for entry in lexicon:
+                term = entry.getKey()
+                self.term_df[term] = entry.getValue().getDocumentFrequency()
+                self.term_cf[term] = entry.getValue().getFrequency()
 
     def load_or_build_index(self, base_index_path):
-        # base_index_path already includes the dataset name, so use it directly
         print(f"Checking for index at: {base_index_path}")
         
         if os.path.exists(base_index_path) and os.listdir(base_index_path):
-            print(f"Found existing index for dataset {self.dataset_name}. Attempting to load...")
+            print(f"Found existing index for dataset {self.dataset_name}. Loading...")
             try:
                 index = pt.IndexFactory.of(base_index_path)
                 self.index = index
-
-                # Access global statistics directly from the index
-                self.total_docs = index.getCollectionStatistics().getNumberOfDocuments()
-                self.total_terms = index.getCollectionStatistics().getNumberOfTokens()
                 
-                # Load term_df and term_cf from the index's collection statistics or lexicon
-                lexicon = index.getLexicon()
-                for entry in lexicon:
-                    term = entry.getKey()
-                    self.term_df[term] = entry.getValue().getDocumentFrequency()
-                    self.term_cf[term] = entry.getValue().getFrequency()
-
+                # Load statistics from index only if we don't have our own
+                if not self.term_df or not self.term_cf:
+                    self._load_statistics_from_index()
+                    
                 print(f"Successfully loaded existing index for {self.dataset_name}")
-                print(f"Loaded total_docs: {self.total_docs}")
-                print(f"Loaded total_tokens: {self.total_terms}")
-                print(f"Loaded term_df with {len(self.term_df)} terms")
-                print(f"Loaded term_cf with {len(self.term_cf)} terms")
-
+                print(f"Total documents: {self.total_docs}")
+                print(f"Total terms: {self.total_terms}")
+                print(f"Unique terms: {len(self.term_df)}")
+                
             except Exception as e:
                 print(f"Error loading existing index: {e}")
                 print("Creating new index...")
@@ -118,9 +111,6 @@ class IndexBuilder:
                 shutil.rmtree(base_index_path)
             index = self.build_index(base_index_path)
         
-        print(f"Index statistics for {self.dataset_name}:")
-        print(f"Total documents indexed: {index.getCollectionStatistics().getNumberOfDocuments()}")
-        print(f"Unique terms: {index.getCollectionStatistics().getNumberOfUniqueTerms()}")
         return index
 
     def get_document_terms(self, doc_id):
