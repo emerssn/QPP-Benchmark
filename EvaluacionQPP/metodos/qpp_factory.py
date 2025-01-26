@@ -53,51 +53,60 @@ class QPPMethodFactory:
             if self.rm_results is not None:
                 self.uef = UEF(self.index_builder, self.retrieval_results, self.rm_results)
     
-    @lru_cache(maxsize=128)
-    def preprocess_queries(self, query_key: Union[str, tuple]) -> Union[List[str], Dict[str, List[str]]]:
+    def compute_all_scores(self, queries: Dict[str, List[str]], **kwargs) -> Dict[str, Dict[str, float]]:
         """
-        Preprocess and cache queries based on their type.
+        Compute scores for all available QPP methods.
         
         Args:
-            query_key: Either a query string or a tuple of (qid, query) pairs
-            
+            queries: Dictionary mapping query IDs to preprocessed query tokens
+            **kwargs: Additional arguments including:
+                - list_size_param: Default list size for methods without specific settings
+                - wig_list_size: List size for WIG method (default: 5)
+                - nqc_list_size: List size for NQC method (default: 100)
+                - num_results: Minimum number of results required for valid queries (default: 1000)
+        
         Returns:
-            Preprocessed queries in the same format as input
+            Dict[str, Dict[str, float]]: Dictionary mapping query IDs to their QPP scores
         """
-        if isinstance(query_key, str):
-            return preprocess_text(query_key, dataset_name=self.dataset_name)
-        elif isinstance(query_key, tuple):
-            return {
-                qid: preprocess_text(query, dataset_name=self.dataset_name)
-                for qid, query in query_key
-            }
-        else:
-            raise ValueError(f"Unsupported query type: {type(query_key)}")
-    
-    def compute_all_scores(self, queries: Dict[str, str], **kwargs) -> Dict[str, Dict[str, float]]:
-        """Compute scores for all available QPP methods."""
         logger = logging.getLogger(__name__)
+        
+        # Get method-specific list sizes
+        default_list_size = kwargs.get('list_size_param', 10)
+        wig_list_size = kwargs.get('wig_list_size', 5)  # Default to 5 as per paper
+        nqc_list_size = kwargs.get('nqc_list_size', 100)  # Default to 100 as per paper
+        
+        # Log list size settings
+        logger.info(
+            f"Using list sizes - WIG: {wig_list_size}, NQC: {nqc_list_size}, "
+            f"Default: {default_list_size}"
+        )
         
         # Get available query IDs from retrieval results
         available_qids = set(self.retrieval_results['qid'].astype(str).unique())
         input_qids = set(queries.keys())
         
-        # Log query coverage
+        # Filter queries with too few results
+        min_results = kwargs.get('num_results', 1000)  # Get minimum required results
+        query_result_counts = self.retrieval_results.groupby('qid').size()
+        valid_qids = set(query_result_counts[query_result_counts >= min_results * 0.1].index.astype(str))
+        
+        # Log query filtering
         logger.info(
             f"Processing queries: {len(input_qids)} input queries, "
-            f"{len(available_qids)} have retrieval results"
+            f"{len(available_qids)} have retrieval results, "
+            f"{len(valid_qids)} have sufficient results (≥{min_results * 0.1:.0f})"
         )
         
-        missing_qids = input_qids - available_qids
-        if missing_qids:
+        filtered_qids = available_qids - valid_qids
+        if filtered_qids:
             logger.warning(
-                f"No retrieval results for {len(missing_qids)} queries: "
-                f"{sorted(missing_qids)[:5]}..."
+                f"Filtered out {len(filtered_qids)} queries with insufficient results: "
+                f"{sorted(filtered_qids)[:5]}..."
             )
         
-        # Convert queries dict to hashable tuple for caching
-        query_items = tuple((qid, queries[qid]) for qid in available_qids & input_qids)
-        processed_queries = self.preprocess_queries(query_items)
+        # Use only valid queries that were in the input
+        valid_query_ids = valid_qids & input_qids
+        valid_queries = {qid: queries[qid] for qid in valid_query_ids}  # Create dictionary instead of tuple
         
         scores = {}
         
@@ -112,12 +121,12 @@ class QPPMethodFactory:
         
         # Compute pre-retrieval scores for valid queries
         valid_scores = {}
-        for qid in processed_queries:
+        for qid in valid_queries:
             valid_scores[qid] = {
-                'idf_avg': self.idf.compute_scores_batch(processed_queries, method='avg').get(qid, 0.0),
-                'idf_max': self.idf.compute_scores_batch(processed_queries, method='max').get(qid, 0.0),
-                'scq_avg': self.scq.compute_scores_batch(processed_queries, method='avg').get(qid, 0.0),
-                'scq_max': self.scq.compute_scores_batch(processed_queries, method='max').get(qid, 0.0)
+                'idf_avg': self.idf.compute_scores_batch(valid_queries, method='avg').get(qid, 0.0),
+                'idf_max': self.idf.compute_scores_batch(valid_queries, method='max').get(qid, 0.0),
+                'scq_avg': self.scq.compute_scores_batch(valid_queries, method='avg').get(qid, 0.0),
+                'scq_max': self.scq.compute_scores_batch(valid_queries, method='max').get(qid, 0.0)
             }
         
         # Update scores with valid results
@@ -125,14 +134,13 @@ class QPPMethodFactory:
         
         # Add post-retrieval scores if available
         if hasattr(self, 'wig'):
-            list_size = kwargs.get('list_size_param', 10)
-            logger.info(f"Computing post-retrieval scores with list size: {list_size}")
+            logger.info("Computing post-retrieval scores with method-specific list sizes")
             
-            # Compute post-retrieval scores
+            # Compute post-retrieval scores with different list sizes
             post_retrieval_scores = {
-                'wig': self.wig.compute_scores_batch(processed_queries, list_size_param=list_size),
-                'nqc': self.nqc.compute_scores_batch(processed_queries, list_size_param=list_size),
-                'clarity': self.clarity.compute_scores_batch(processed_queries)
+                'wig': self.wig.compute_scores_batch(valid_queries, list_size_param=wig_list_size),
+                'nqc': self.nqc.compute_scores_batch(valid_queries, list_size_param=nqc_list_size),
+                'clarity': self.clarity.compute_scores_batch(valid_queries)
             }
             
             # Update scores dictionary for queries with retrieval results
@@ -144,8 +152,9 @@ class QPPMethodFactory:
             if hasattr(self, 'uef'):
                 logger.debug("Computing UEF scores")
                 uef_scores = {
-                    'uef_wig': self.uef.compute_scores_batch(processed_queries, post_retrieval_scores['wig'], list_size),
-                    'uef_nqc': self.uef.compute_scores_batch(processed_queries, post_retrieval_scores['nqc'], list_size)
+                    'uef_wig': self.uef.compute_scores_batch(valid_queries, post_retrieval_scores['wig'], wig_list_size),
+                    'uef_nqc': self.uef.compute_scores_batch(valid_queries, post_retrieval_scores['nqc'], nqc_list_size),
+                    'uef_clarity': self.uef.compute_scores_batch(valid_queries, post_retrieval_scores['clarity'])
                 }
                 
                 for qid in input_qids:

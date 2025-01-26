@@ -34,22 +34,30 @@ class WIG(PostRetrievalMethod):
 
     def _calc_corpus_score(self):
         """
-        Calculates the corpus score using collection frequencies.
+        Calculates the BM25 corpus score instead of QL score
         """
         if not self.query_terms:
             print("No query terms provided.")
             return 0.0
-        cf_vec = np.array([self._get_term_cf(term) for term in self.query_terms])
-        if self.total_tokens == 0:
-            print("Warning: Total tokens in collection is zero.")
-            return 0.0
-        # Handle cases where cf_vec might contain zeros to avoid log(0)
-        with np.errstate(divide='ignore'):
-            log_cf = np.log(np.where(cf_vec == 0, 1, cf_vec) / self.total_tokens)
-        # Use mean to mitigate impact of outliers
-        corpus_score = log_cf.mean()
-        #print(f"Calculated corpus_score: {corpus_score}")
-        return corpus_score
+        
+        # Use average document length for corpus score calculation
+        avg_doc_len = self.total_tokens / self.total_docs
+        k1 = 1.2  # BM25 k1 parameter
+        b = 0.75  # BM25 b parameter
+        
+        scores = []
+        for term in self.query_terms:
+            cf = self._get_term_cf(term)
+            idf = np.log((self.total_docs - cf + 0.5) / (cf + 0.5) + 1.0)
+            tf = cf / self.total_docs  # Average term frequency across collection
+            
+            # BM25 term score calculation
+            numerator = tf * (k1 + 1)
+            denominator = tf + k1 * (1 - b + b * (avg_doc_len / avg_doc_len))  # Simplified as ratio is 1
+            term_score = idf * (numerator / denominator)
+            scores.append(term_score)
+        
+        return np.mean(scores) if scores else 0.0
 
     def compute_score(self, query_id, query_terms, list_size_param=10):
         """
@@ -93,7 +101,6 @@ class WIG(PostRetrievalMethod):
             print("Corpus score is zero; returning WIG score as 0.0 to avoid division by zero.")
             return 0.0
         wig_score = (scores_vec.mean() - self.ql_corpus_score) / np.sqrt(len(self.query_terms))
-        #print(f"Calculated WIG score: {wig_score}")
         return wig_score
 
     def compute_scores_batch(self, queries_terms_dict, list_size_param=10):

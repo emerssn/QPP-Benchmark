@@ -43,7 +43,7 @@ class IquiqueDataset:
     def get_corpus_iter(self) -> Iterable[Dict[str, str]]:
         """Devuelve un iterador sobre la colección de documentos"""
         for doc_id, text in self.documents.items():
-            yield {"doc_id": doc_id, "text": text}
+            yield {"docno": doc_id, "text": text}
 
     def iter_docs(self):
         """Devuelve un iterador sobre los documentos en el formato (doc_id, text)"""

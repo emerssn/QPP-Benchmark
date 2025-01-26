@@ -2,97 +2,168 @@ import numpy as np
 import pandas as pd
 from typing import Dict
 from ..base import PostRetrievalMethod
-from ...evaluation.evaluator import DATASET_FORMATS
+from ...utils.config import DATASET_FORMATS
+import logging
+
 
 class UEF(PostRetrievalMethod):
     def __init__(self, index_builder, retrieval_results, rm_results_df=None, dataset_name="antique_test"):
         super().__init__(index_builder, retrieval_results)
-        self.rm_results_df = rm_results_df if rm_results_df is not None else retrieval_results
-        self.dataset_config = DATASET_FORMATS.get(dataset_name, DATASET_FORMATS["antique_test"])
-        
-        # Clean up column names in both dataframes
-        self.retrieval_results = self._clean_dataframe(self.retrieval_results)
-        self.rm_results_df = self._clean_dataframe(self.rm_results_df)
-    
+        # Clean the dataframes to standardize column names
+        self.retrieval_results = self._clean_dataframe(retrieval_results.copy())
+        self.rm_results_df = self._clean_dataframe(rm_results_df.copy()) if rm_results_df is not None else None
+        # Define expected column names after cleaning
+        self.query_id_col = 'query_id'
+        self.doc_id_col = 'doc_id'
+        self.score_col = 'score'
+        # Validate columns after cleaning
+        self._validate_columns(self.retrieval_results, 'retrieval_results')
+        if self.rm_results_df is not None:
+            self._validate_columns(self.rm_results_df, 'rm_results_df')
+
+    def _validate_columns(self, df, df_name):
+        """Ensure required columns exist"""
+        required = [self.query_id_col, self.doc_id_col, self.score_col]
+        if not all(col in df.columns for col in required):
+            raise ValueError(f"Missing columns in {df_name}: {required}")        
+
     def _clean_dataframe(self, df):
-        """Clean up DataFrame columns and ensure consistent naming."""
-        # Remove duplicate columns
-        df = df.loc[:, ~df.columns.duplicated(keep='first')]
-        
-        # Standardize column names
+        """Standardize dataframe columns using dataset config"""
         column_mapping = {
-            'docno': 'doc_id',
-            'score': 'docScore'
+            'qid': 'query_id',     # Maps 'qid' to 'query_id'
+            'docno': 'doc_id',     # Maps 'docno' to 'doc_id'
+            'docScore': 'score'    # Maps 'docScore' to 'score'
         }
-        
-        # Only rename columns that exist
-        df = df.rename(columns=column_mapping)
-        
-        # Ensure doc_id is string type and apply dataset-specific transformation
-        if 'doc_id' in df.columns:
-            df['doc_id'] = df['doc_id'].astype(str).apply(self.dataset_config["run_doc_id_transform"])
-        
-        return df
+        return df.rename(columns=column_mapping)
 
-    def compute_scores_batch(self, processed_queries: Dict[str, list], predictor_scores: Dict[str, float], 
-                           list_size: int = 100) -> Dict[str, float]:
-        """Compute UEF scores for a batch of queries."""
-        uef_scores = {}
+    def compute_score(self, qid: str, predictor_score: float) -> float:
+        """
+        Compute UEF score for a single query.
         
-        for qid in processed_queries.keys():
-            original_results = self.retrieval_results[
-                self.retrieval_results['qid'] == qid
-            ].head(list_size).copy()
-            
-            rm_results = self.rm_results_df[
-                self.rm_results_df['qid'] == qid
-            ].head(list_size).copy()
-            
-            if not original_results.empty and not rm_results.empty:
-                try:
-                    original_scores = original_results.set_index('doc_id')['docScore']
-                    rm_scores = rm_results.set_index('doc_id')['docScore']
-                    
-                    common_docs = original_scores.index.intersection(rm_scores.index)
-                    
-                    if len(common_docs) >= 2:
-                        orig_common = original_scores[common_docs]
-                        rm_common = rm_scores[common_docs]
-                        
-                        similarity = orig_common.corr(rm_common)
-                        uef_scores[qid] = similarity * predictor_scores.get(qid, 0.0)
-                    else:
-                        uef_scores[qid] = 0.0
-                except Exception as e:
-                    print(f"Error computing UEF score for query {qid}: {str(e)}")
-                    uef_scores[qid] = 0.0
-            else:
-                uef_scores[qid] = 0.0
+        Args:
+            qid: Query ID
+            predictor_score: Score from the base predictor (WIG/NQC)
         
-        return uef_scores
-
-    def compute_score(self, qid: str, original_results: pd.DataFrame, 
-                     rm_results: pd.DataFrame, predictor_score: float) -> float:
-        """Compute UEF score for a single query."""
+        Returns:
+            float: UEF score, or 0.0 if correlation cannot be computed
+        """
+        logger = logging.getLogger(__name__)
+        
+        # Get results for this query
+        original_results = self.retrieval_results[
+            self.retrieval_results[self.query_id_col] == qid
+        ].copy()
+        
+        rm_results = self.rm_results_df[
+            self.rm_results_df[self.query_id_col] == qid
+        ].copy()
+        
         if original_results.empty or rm_results.empty:
+            logger.debug(f"No results found for query {qid}")
             return 0.0
 
         try:
-            # Use doc_id for correlation calculation
-            original_scores = original_results.set_index('doc_id')['docScore']
-            rm_scores = rm_results.set_index('doc_id')['docScore']
+            # Convert to score series
+            orig_scores = original_results.set_index(self.doc_id_col)[self.score_col]
+            rm_scores = rm_results.set_index(self.doc_id_col)[self.score_col]
             
-            # Calculate correlation between original and RM rankings
-            common_docs = original_scores.index.intersection(rm_scores.index)
-            if len(common_docs) < 2:  # Need at least 2 documents for correlation
+            # Calculate correlation
+            common_docs = orig_scores.index.intersection(rm_scores.index)
+            if len(common_docs) < 2:
+                logger.debug(f"Insufficient common documents ({len(common_docs)}) for query {qid}")
                 return 0.0
-                
-            correlation = original_scores[common_docs].corr(rm_scores[common_docs])
             
-            # Calculate final UEF score
-            uef_score = correlation * predictor_score
+            # Normalize scores to prevent numerical issues
+            orig_norm = (orig_scores[common_docs] - orig_scores[common_docs].mean()) / orig_scores[common_docs].std()
+            rm_norm = (rm_scores[common_docs] - rm_scores[common_docs].mean()) / rm_scores[common_docs].std()
             
-            return uef_score
+            # Handle zero standard deviation
+            if orig_norm.isna().any() or rm_norm.isna().any():
+                logger.debug(f"Zero variance in scores for query {qid}")
+                return 0.0
+            
+            correlation = orig_norm.corr(rm_norm)
+            
+            # Handle NaN correlation
+            if pd.isna(correlation):
+                logger.debug(f"NaN correlation for query {qid}")
+                return 0.0
+            
+            return correlation * predictor_score
+            
         except Exception as e:
-            print(f"Error computing UEF score: {str(e)}")
+            logger.error(f"Error computing UEF score for query {qid}: {e}")
             return 0.0
+
+    def compute_scores_batch(self, processed_queries: Dict[str, list], 
+                            predictor_scores: Dict[str, float], 
+                            list_size: int = None) -> Dict[str, float]:
+        """
+        Batch implementation using compute_score.
+        
+        Args:
+            processed_queries: Dictionary mapping query IDs to preprocessed query tokens
+            predictor_scores: Dictionary mapping query IDs to their predictor scores (WIG/NQC)
+            list_size: Size of result list to consider (should match the predictor's list size)
+                      If None, uses all available results
+        
+        Returns:
+            Dict[str, float]: Dictionary mapping query IDs to their UEF scores
+        """
+        logger = logging.getLogger(__name__)
+        logger.info(f"Computing UEF scores with list size: {list_size}")
+        
+        if list_size is not None and list_size < 5:
+            logger.warning(f"List size {list_size} may be too small for reliable UEF scores")
+        
+        uef_scores = {}
+        for qid in processed_queries.keys():
+            try:
+                # Filter results to top-k if list_size is specified
+                if list_size is not None:
+                    original_results = self.retrieval_results[
+                        self.retrieval_results[self.query_id_col] == qid
+                    ].head(list_size)
+                    
+                    rm_results = self.rm_results_df[
+                        self.rm_results_df[self.query_id_col] == qid
+                    ].head(list_size)
+                    
+                    # Check if we have enough results after filtering
+                    if len(original_results) < 2 or len(rm_results) < 2:
+                        logger.debug(f"Insufficient results after filtering for query {qid}")
+                        uef_scores[qid] = 0.0
+                        continue
+                else:
+                    original_results = self.retrieval_results[
+                        self.retrieval_results[self.query_id_col] == qid
+                    ]
+                    rm_results = self.rm_results_df[
+                        self.rm_results_df[self.query_id_col] == qid
+                    ]
+                
+                # Set results in temporary dataframes
+                temp_retrieval_results = self.retrieval_results.copy()
+                temp_rm_results = self.rm_results_df.copy()
+                
+                # Update instance temporarily for compute_score
+                self.retrieval_results = original_results
+                self.rm_results_df = rm_results
+                
+                # Compute score
+                score = self.compute_score(qid, predictor_scores.get(qid, 0.0))
+                uef_scores[qid] = score
+                
+                # Restore original dataframes
+                self.retrieval_results = temp_retrieval_results
+                self.rm_results_df = temp_rm_results
+                
+            except Exception as e:
+                logger.error(f"Error computing UEF score for query {qid}: {e}")
+                uef_scores[qid] = 0.0
+        
+        # Log statistics about computed scores
+        non_zero_scores = sum(1 for score in uef_scores.values() if score != 0)
+        logger.info(f"Computed {len(uef_scores)} UEF scores, {non_zero_scores} non-zero")
+        
+        return uef_scores

@@ -41,12 +41,10 @@ class IDF(PreRetrievalMethod):
         idfs = []
         for term in query_terms:
             df = self._get_term_df(term)
-            if df > 0:  # Avoid log(0)
-                idf = np.log(self.total_docs / df)
-                idfs.append(idf)
-            else:
-                # If term not found, use maximum possible IDF
-                idfs.append(np.log(self.total_docs))
+            # Apply add-1 smoothing to avoid division by zero
+            df += 1
+            idf = np.log((self.total_docs + 1) / df)  # Laplace smoothing
+            idfs.append(idf)
         
         if not idfs:
             return 0.0

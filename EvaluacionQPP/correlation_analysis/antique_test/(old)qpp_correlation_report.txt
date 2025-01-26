@@ -1,0 +1,32 @@
+QPP Correlation Analysis Report
+==============================
+
+Metrics analyzed: nDCG@k and AP
+
+
+KENDALL Correlations:
+------------------------
+
+Number of queries used:
+idf_avg: 200 queries
+idf_max: 200 queries
+scq_avg: 200 queries
+scq_max: 200 queries
+wig: 200 queries
+nqc: 200 queries
+clarity: 200 queries
+
+Correlation values (statistically significant only):
+          ndcg@10        ap
+idf_avg   0.14585  0.047291
+idf_max  0.109782  0.055769
+scq_avg  0.035406  0.075757
+scq_max  0.059455 -0.028016
+wig      0.207554  0.075654
+nqc      0.071524  0.141182
+clarity -0.067054  0.054671
+
+Summary Statistics:
+Best performing QPP method: wig
+Most predictable metric: ndcg@10
+

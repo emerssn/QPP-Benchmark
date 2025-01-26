@@ -8,6 +8,18 @@ import logging
 import os
 from ..utils.file_utils import ensure_dir
 
+METHOD_NAME_MAP = {
+    'idf_avg': 'IDF Promedio',
+    'idf_max': 'IDF Máximo',
+    'scq_avg': 'SCQ Promedio',
+    'scq_max': 'SCQ Máximo',
+    'wig': 'WIG',
+    'nqc': 'NQC',
+    'clarity': 'Clarity',
+    'uef_wig': 'UEF-WIG',
+    'uef_nqc': 'UEF-NQC'
+}
+
 class QPPCorrelationAnalyzer:
     """
     Analyzes correlations between QPP predictions and retrieval effectiveness metrics (nDCG and AP).
@@ -15,7 +27,8 @@ class QPPCorrelationAnalyzer:
     
     def __init__(self, qpp_scores: Dict[str, Dict[str, float]], 
                  retrieval_metrics: Dict[str, Dict[str, Union[float, Dict[str, float]]]],
-                 output_dir: Optional[str] = None):
+                 output_dir: Optional[str] = None,
+                 dpi: int = 300):
         """
         Initialize the QPP correlation analyzer.
         
@@ -24,29 +37,49 @@ class QPPCorrelationAnalyzer:
             retrieval_metrics: Dictionary of retrieval metrics {metric: {per_query: {qid: score}, mean: float}}
                              Only nDCG and AP metrics are supported
             output_dir: Directory to save results and plots
+            dpi: DPI (dots per inch) for saved plots
         
         Raises:
             ValueError: If qpp_scores is empty or retrieval_metrics contains no valid metrics
         """
         self.logger = logging.getLogger(__name__)
+        self.dpi = dpi
         
+
         # Validate input data
         if not qpp_scores:
             raise ValueError("QPP scores dictionary cannot be empty")
         
         # Validate metrics - only allow nDCG and AP
         valid_metrics = {k: v for k, v in retrieval_metrics.items() 
-                        if k.lower().startswith('ndcg@') or k.lower() in ['map', 'ap']}
+                        if any(k.lower().startswith(prefix) 
+                              for prefix in ['ndcg@', 'map', 'ap', 'p@', 'rr@'])}
         
         if not valid_metrics:
-            raise ValueError("No valid metrics found. Only nDCG@k and AP metrics are supported.")
-        
+            raise ValueError("No valid metrics found. Supported metrics: nDCG@k, AP/MAP, P@k, RR@k")
+            
         if len(valid_metrics) != len(retrieval_metrics):
             self.logger.warning("Some metrics were filtered out. Only nDCG@k and AP metrics are supported.")
         
+        # Add validation for QPP scores
+        for method, scores in qpp_scores.items():
+            if not all(isinstance(score, (int, float)) for score in scores.values()):
+                raise ValueError(f"Non-numeric QPP scores found in method: {method}")
+                
         self.qpp_scores = qpp_scores
         self.retrieval_metrics = valid_metrics
         self.output_dir = ensure_dir(output_dir) if output_dir else None
+        # Align query sets between QPP and metrics
+        common_qids = set(qpp_scores.keys()) & set(retrieval_metrics['ndcg@10']['per_query'].keys())
+        
+        self.qpp_scores = {k:v for k,v in qpp_scores.items() if k in common_qids}
+        self.retrieval_metrics = {
+            metric: {
+                'per_query': {k:v for k,v in scores['per_query'].items() if k in common_qids},
+                'mean': np.mean(list(scores['per_query'].values()))
+            } 
+            for metric, scores in retrieval_metrics.items()
+        }
         
         # Convert data to DataFrames for easier analysis
         self.qpp_df = pd.DataFrame.from_dict(qpp_scores, orient='index')
@@ -59,50 +92,58 @@ class QPPCorrelationAnalyzer:
         self.align_qids()
 
     def calculate_correlations(self, 
-                             correlation_types: List[str] = ['pearson', 'spearman', 'kendall']
-                             ) -> Dict[str, pd.DataFrame]:
+                             correlation_types: List[str] = ['pearson', 'spearman', 'kendall'],
+                             min_queries: int = 5,
+                             min_results_per_query: Optional[int] = None) -> Dict[str, pd.DataFrame]:
         """
         Calculate correlations between QPP scores and retrieval metrics.
         
         Args:
             correlation_types: List of correlation coefficients to compute
-            
-        Returns:
-            Dictionary of correlation DataFrames for each correlation type
+            min_queries: Minimum number of queries required for correlation calculation
+            min_results_per_query: Minimum number of results required per query
         """
-        self.logger.info("Starting correlation calculations")
         correlations = {}
         
         for corr_type in correlation_types:
             corr_df = pd.DataFrame(index=self.qpp_df.columns, columns=self.metrics_df.columns)
-            self.logger.info(f"Calculating {corr_type} correlations")
             
             for qpp_method in self.qpp_df.columns:
                 for metric in self.metrics_df.columns:
+                    # Filter out queries with insufficient results if threshold provided
                     valid_mask = ~(self.qpp_df[qpp_method].isna() | self.metrics_df[metric].isna())
+                    
                     x = self.qpp_df[qpp_method][valid_mask]
                     y = self.metrics_df[metric][valid_mask]
                     
-                    self.logger.debug(f"Processing QPP Method: {qpp_method}, Metric: {metric}, QIDs used: {len(x)}")
-                    
                     try:
-                        if len(x) > 1 and len(y) > 1:
+                        if len(x) >= min_queries:
                             if corr_type == 'pearson':
-                                corr, _ = stats.pearsonr(x, y)
+                                corr, p_value = stats.pearsonr(x, y)
                             elif corr_type == 'spearman':
-                                corr, _ = stats.spearmanr(x, y)
-                            else:
-                                corr, _ = stats.kendalltau(x, y)
+                                corr, p_value = stats.spearmanr(x, y)
+                            else:  # kendall
+                                corr, p_value = stats.kendalltau(x, y)
+                                
+                            corr_df.loc[qpp_method, metric] = corr
+                            
+                            # Log if not significant
+                            if p_value >= 0.05:
+                                self.logger.info(
+                                    f"Non-significant correlation for {qpp_method} vs {metric} "
+                                    f"(p={p_value:.3f}, n={len(x)})"
+                                )
                         else:
-                            corr = float('nan')
+                            corr_df.loc[qpp_method, metric] = float('nan')
+                            self.logger.warning(
+                                f"Insufficient queries for {qpp_method} vs {metric} "
+                                f"(n={len(x)} < {min_queries})"
+                            )
                     except Exception as e:
-                        self.logger.warning(f"Error calculating {corr_type} correlation for {qpp_method} vs {metric}: {e}")
-                        corr = float('nan')
-                    
-                    corr_df.loc[qpp_method, metric] = corr
-                    
+                        self.logger.warning(f"Error calculating {corr_type} correlation: {e}")
+                        corr_df.loc[qpp_method, metric] = float('nan')
+            
             correlations[corr_type] = corr_df
-            self.logger.info(f"Completed {corr_type} correlations")
             
         return correlations
 
@@ -117,17 +158,24 @@ class QPPCorrelationAnalyzer:
         """
         correlations = self.calculate_correlations([correlation_type])[correlation_type]
         
-        # Convert to numeric, replacing any remaining non-numeric values with NaN
+        # Convert to numeric, replacing any non-numeric values with NaN
         correlations = correlations.apply(pd.to_numeric, errors='coerce')
         
+        # Map method names to Spanish
+        correlations.index = correlations.index.map(lambda x: METHOD_NAME_MAP.get(x, x))
+        
         plt.figure(figsize=(10, 8))
+        # Create mask for NaN values
+        mask = np.isnan(correlations)
+        
         sns.heatmap(correlations, annot=True, cmap='RdYlBu', center=0, 
-                    vmin=-1, vmax=1, fmt='.3f', mask=correlations.isna())
-        plt.title(f'{correlation_type.capitalize()} Correlation between QPP and Retrieval Metrics')
+                    vmin=-1, vmax=1, fmt='.3f', mask=mask)
+        plt.title(f'Correlación {correlation_type.capitalize()} entre QPP y Métricas de Recuperación')
         plt.tight_layout()
         
         if save_plot and self.output_dir:
-            plt.savefig(os.path.join(self.output_dir, f'qpp_correlation_{correlation_type}.pdf'))
+            plt.savefig(os.path.join(self.output_dir, f'correlacion_qpp_{correlation_type}.pdf'), dpi=self.dpi)
+            plt.savefig(os.path.join(self.output_dir, f'correlacion_qpp_{correlation_type}.png'), dpi=self.dpi)
             plt.close()
         else:
             plt.show()
@@ -159,9 +207,10 @@ class QPPCorrelationAnalyzer:
             )
             
             corr, _ = stats.kendalltau(self.qpp_df[qpp_method], self.metrics_df[metric])
-            ax.set_title(f'{qpp_method}\nτ = {corr:.3f}')
-            ax.set_xlabel('QPP Score')
-            ax.set_ylabel(f'{metric} Score')
+            method_name = METHOD_NAME_MAP.get(qpp_method, qpp_method)
+            ax.set_title(f'{method_name}\nτ = {corr:.3f}')
+            ax.set_xlabel('Puntuación QPP')
+            ax.set_ylabel(f'Puntuación {metric}')
             
         # Remove empty subplots
         for idx in range(n_methods, len(axes.flat)):
@@ -170,7 +219,8 @@ class QPPCorrelationAnalyzer:
         plt.tight_layout()
         
         if save_plots and self.output_dir:
-            plt.savefig(os.path.join(self.output_dir, f'qpp_scatter_{metric}.pdf'))
+            plt.savefig(os.path.join(self.output_dir, f'dispersion_qpp_{metric}.pdf'), dpi=self.dpi)
+            plt.savefig(os.path.join(self.output_dir, f'dispersion_qpp_{metric}.png'), dpi=self.dpi)
             plt.close()
         else:
             plt.show()
@@ -183,26 +233,38 @@ class QPPCorrelationAnalyzer:
             correlation_types: List of correlation types to include in report
         """
         if not self.output_dir:
-            self.logger.warning("No output directory specified. Cannot save report.")
+            self.logger.warning("No se especificó directorio de salida. No se puede guardar el informe.")
             return
             
         correlations = self.calculate_correlations(correlation_types)
         
-        with open(os.path.join(self.output_dir, 'qpp_correlation_report.txt'), 'w') as f:
-            f.write("QPP Correlation Analysis Report\n")
-            f.write("==============================\n\n")
-            f.write("Metrics analyzed: nDCG@k and AP\n\n")
+        with open(os.path.join(self.output_dir, 'informe_correlacion_qpp.txt'), 'w') as f:
+            f.write("Informe de Análisis de Correlación QPP\n")
+            f.write("=====================================\n\n")
+            f.write("Métricas analizadas: nDCG@k y AP\n\n")
             
             for corr_type, corr_df in correlations.items():
-                f.write(f"\n{corr_type.upper()} Correlations:\n")
+                f.write(f"\nCorrelaciones {corr_type.upper()}:\n")
                 f.write("------------------------\n")
-                f.write(corr_df.to_string())
+                
+                f.write("\nNúmero de consultas utilizadas:\n")
+                for method in corr_df.index:
+                    n_queries = len(self.qpp_df[method].dropna())
+                    method_name = METHOD_NAME_MAP.get(method, method)
+                    f.write(f"{method_name}: {n_queries} consultas\n")
+                
+                f.write("\nValores de correlación (solo estadísticamente significativos):\n")
+                # Map method names for display
+                display_df = corr_df.copy()
+                display_df.index = display_df.index.map(lambda x: METHOD_NAME_MAP.get(x, x))
+                f.write(display_df.to_string())
                 f.write("\n\n")
                 
-                # Add summary statistics
-                f.write("Summary Statistics:\n")
-                f.write(f"Best performing QPP method: {corr_df.mean(axis=1).idxmax()}\n")
-                f.write(f"Most predictable metric: {corr_df.mean(axis=0).idxmax()}\n")
+                f.write("Estadísticas Resumen:\n")
+                best_method = corr_df.mean(axis=1).idxmax()
+                best_metric = corr_df.mean(axis=0).idxmax()
+                f.write(f"Mejor método QPP: {METHOD_NAME_MAP.get(best_method, best_method)}\n")
+                f.write(f"Métrica más predecible: {best_metric}\n")
                 f.write("\n")
                 
             # Generate plots
@@ -244,6 +306,9 @@ class QPPCorrelationAnalyzer:
                 plot_data.append(data)
                 labels.append(method)
         
+        # Map method names to Spanish
+        labels = [METHOD_NAME_MAP.get(method, method) for method in labels]
+        
         # Create boxplot
         bp = plt.boxplot(plot_data, labels=labels, patch_artist=True)
         
@@ -252,10 +317,10 @@ class QPPCorrelationAnalyzer:
             box.set(facecolor='lightblue', alpha=0.7)
         
         # Customize plot
-        plt.ylabel(f'{correlation_type.capitalize()} Correlation', fontsize=16)
-        plt.xlabel('QPP Method', fontsize=16)
+        plt.ylabel(f'Correlación {correlation_type.capitalize()}', fontsize=16)
+        plt.xlabel('Método QPP', fontsize=16)
         plt.xticks(rotation=45, ha='right')
-        plt.title(f'QPP Method Performance across Metrics')
+        plt.title(f'Rendimiento de Métodos QPP a través de Métricas')
         plt.grid(True, axis='y')
         
         # Add horizontal line at y=0 for reference
@@ -268,7 +333,8 @@ class QPPCorrelationAnalyzer:
         plt.tight_layout()
         
         if save_plot and self.output_dir:
-            plt.savefig(os.path.join(self.output_dir, f'qpp_correlations_boxplot_{correlation_type}.pdf'))
+            plt.savefig(os.path.join(self.output_dir, f'correlaciones_qpp_boxplot_{correlation_type}.pdf'), dpi=self.dpi)
+            plt.savefig(os.path.join(self.output_dir, f'correlaciones_qpp_boxplot_{correlation_type}.png'), dpi=self.dpi)
             plt.close()
         else:
             plt.show()
@@ -277,7 +343,8 @@ class QPPCorrelationAnalyzer:
     def plot_correlations_across_datasets(
         datasets: Dict[str, 'QPPCorrelationAnalyzer'],
         correlation_type: str = 'kendall',
-        output_dir: str = None
+        output_dir: str = None,
+        dpi: int = 300
     ) -> None:
         """
         Plot correlations across multiple datasets.
@@ -286,6 +353,7 @@ class QPPCorrelationAnalyzer:
             datasets: Dictionary mapping dataset names to their QPPCorrelationAnalyzer instances
             correlation_type: Type of correlation to plot
             output_dir: Directory to save the plot
+            dpi: DPI for saved plots
         """
         # Collect correlations from all datasets
         dataset_correlations = {}
@@ -363,7 +431,8 @@ class QPPCorrelationAnalyzer:
         plt.tight_layout()
         
         if output_dir:
-            plt.savefig(os.path.join(output_dir, f'qpp_correlations_across_datasets_{correlation_type}.pdf'))
+            plt.savefig(os.path.join(output_dir, f'qpp_correlations_across_datasets_{correlation_type}.pdf'), dpi=dpi)
+            plt.savefig(os.path.join(output_dir, f'qpp_correlations_across_datasets_{correlation_type}.png'), dpi=dpi)
             plt.close()
         else:
             plt.show()

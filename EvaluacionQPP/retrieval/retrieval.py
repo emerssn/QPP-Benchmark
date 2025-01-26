@@ -8,7 +8,7 @@ import os
 import shutil
 from typing import Union, Dict
 from EvaluacionQPP.data.iquique_dataset import IquiqueDataset
-from EvaluacionQPP.evaluation.evaluator import DATASET_FORMATS
+from EvaluacionQPP.utils.config import DATASET_FORMATS
 import logging
 
 def get_dataset_config(dataset):
@@ -161,15 +161,27 @@ def get_batch_scores(
     queries_df: pd.DataFrame,
     index: Union[pt.IndexFactory, str], 
     method: str = 'BM25',
-    num_results: int = 1000,
+    num_results: int = 1000,  # Keep default at 1000 for corpus score calculation
     controls: Dict = None
 ) -> pd.DataFrame:
     """
-    Get retrieval scores for multiple queries using PyTerrier
+    Get retrieval scores for multiple queries using PyTerrier.
+    Now ensures we get at least 1000 results for corpus score calculation.
     """
+    logger = logging.getLogger(__name__)
+    
+    # Ensure we get enough results for corpus score calculation
+    min_results = max(num_results, 1000)  # Need at least 1000 for corpus score
+    
     # Convert string path to index if needed
     if isinstance(index, str):
         index = pt.IndexFactory.of(index)
+    
+    # Clean up queries DataFrame if it contains dictionaries
+    if isinstance(queries_df['query'].iloc[0], dict):
+        logger.info("Converting query dictionaries to raw query text")
+        queries_df = queries_df.copy()
+        queries_df['query'] = queries_df['query'].apply(lambda x: x['raw'])
     
     # Set default controls if none provided
     if controls is None:
@@ -191,21 +203,21 @@ def get_batch_scores(
             index, 
             wmodel='BM25',
             controls=controls.get('BM25', {}),
-            num_results=num_results
+            num_results=min_results
         )
     elif method == 'TF_IDF':
         retriever = pt.BatchRetrieve(
             index, 
             wmodel='TF_IDF',
             controls=controls.get('TF_IDF', {}),
-            num_results=num_results
+            num_results=min_results
         )
     elif method == 'DirichletLM':
         retriever = pt.BatchRetrieve(
             index, 
             wmodel='DirichletLM',
             controls=controls.get('DirichletLM', {}),
-            num_results=num_results
+            num_results=min_results
         )
     elif method == 'RM3':
         rm3_controls = controls.get('RM3', {})
@@ -216,44 +228,77 @@ def get_batch_scores(
             fb_terms=rm3_controls.get('fb_terms', 10),
             fb_docs=rm3_controls.get('fb_docs', 10),
             original_weight=rm3_controls.get('original_weight', 0.5),
-            num_results=num_results
+            num_results=min_results
         )
     else:
         raise ValueError(f"Unsupported retrieval method: {method}")
-
+    
     # Get initial results
     results = retriever.transform(queries_df)
     
-    # Add text based on dataset type
+    # Add text field to results
     if isinstance(dataset, IquiqueDataset):
         # For IquiqueDataset, directly map docno to text
         results['text'] = results['docno'].map(dataset.documents)
     else:
-        # Use the getter of text from PyTerrier for other datasets
+        # Use PyTerrier's text getter for other datasets
         text_getter = pt.text.get_text(dataset, "text")
         results = text_getter.transform(results)
     
+    # Verify text field is present
+    if 'text' not in results.columns:
+        logger.error("Failed to add text field to retrieval results!")
+        print("Available columns:", results.columns.tolist())
+        raise ValueError("Text field missing from retrieval results")
+        
     # Get dataset configuration
     dataset_config = get_dataset_config(dataset)
     
-    # Clean up column names first
-    # Keep the first occurrence of each column name
+    # Clean up column names
     results = results.loc[:, ~results.columns.duplicated(keep='first')]
-    
-    # Rename columns
+
+    #print column names
+    print("Available columns:", results.columns.tolist())
+    # Ensure consistent column names
     column_mapping = {
-        'score': 'docScore',
-        'docid': 'docno'  # Map docid to docno if it exists
+        'docid': 'docno',  # First normalize to docno
+        'score': 'docScore'
     }
-    # Only rename columns that exist
+    
     for old_col, new_col in column_mapping.items():
         if old_col in results.columns and new_col not in results.columns:
             results = results.rename(columns={old_col: new_col})
+
+    # After initial renaming, ensure single doc_id column
+    if 'docno' in results.columns:
+        results['doc_id'] = results['docno']  # Create final doc_id from normalized docno
+    elif 'docid' in results.columns:
+        results['doc_id'] = results['docid']  # Fallback to docid if docno missing
+    
+    results['docScore'] = pd.to_numeric(results['docScore'], errors='coerce').fillna(0)
+    # Make sure we have the required columns
+    required_columns = ['qid', 'docno', 'docScore', 'text']
+    missing_columns = [col for col in required_columns if col not in results.columns]
+    if missing_columns:
+        logger.error(f"Missing required columns: {missing_columns}")
+        logger.error(f"Available columns: {results.columns.tolist()}")
+        raise ValueError(f"Missing required columns: {missing_columns}")
     
     # Apply document ID transformation based on dataset configuration
-    results['docno'] = results['docno'].astype(str).apply(dataset_config["doc_id_transform"])
+    if dataset_config.get('doc_id_transform'):
+        results['docno'] = results['docno'].astype(str).apply(dataset_config["doc_id_transform"])
     
     # Reset index to ensure proper ordering
     results = results.reset_index(drop=True)
+    
+    # Before returning, add doc_id column for ir_measures
+    results['doc_id'] = results['docno']  # Create doc_id column from docno
+
+        # Remove duplicate ID columns
+    results = results.drop(columns=['docid', 'docno'], errors='ignore')
+    
+    # Add logging before return
+    logger.info(f"Retrieved results columns: {results.columns.tolist()}")
+    logger.info(f"Sample result:\n{results.head(1).to_dict('records')}")
     
     return results
