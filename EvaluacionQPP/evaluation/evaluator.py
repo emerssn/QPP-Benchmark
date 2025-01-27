@@ -8,6 +8,7 @@ from ..utils.file_utils import ensure_dir
 import logging
 from ..utils.config import DATASET_FORMATS
 import json
+from EvaluacionQPP.evaluation.evaluator_viz import RetrievalMetricsVisualizer
 
 
 
@@ -147,5 +148,9 @@ def evaluate_results(
         output_path = os.path.join(ensure_dir(output_dir), 'results.json')
         with open(output_path, 'w') as f:
             json.dump(results, f, indent=2)
+        
+        # Generate visualizations
+        visualizer = RetrievalMetricsVisualizer(results, output_dir)
+        visualizer.generate_all_plots(save=True)
     
     return results

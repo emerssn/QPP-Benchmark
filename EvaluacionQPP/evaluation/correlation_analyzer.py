@@ -8,6 +8,19 @@ import logging
 import os
 from ..utils.file_utils import ensure_dir
 
+# Configuración estética global
+sns.set_style("whitegrid")
+sns.set_context("notebook", font_scale=1.5)
+plt.rcParams.update({
+    'font.family': 'serif',
+    'axes.labelsize': 14,
+    'axes.titlesize': 16,
+    'xtick.labelsize': 12,
+    'ytick.labelsize': 12,
+    'figure.dpi': 300,
+    'savefig.bbox': 'tight'
+})
+
 METHOD_NAME_MAP = {
     'idf_avg': 'IDF Promedio',
     'idf_max': 'IDF Máximo',
@@ -17,7 +30,8 @@ METHOD_NAME_MAP = {
     'nqc': 'NQC',
     'clarity': 'Clarity',
     'uef_wig': 'UEF-WIG',
-    'uef_nqc': 'UEF-NQC'
+    'uef_nqc': 'UEF-NQC',
+    'uef_clarity': 'UEF-Clarity'
 }
 
 class QPPCorrelationAnalyzer:
@@ -44,7 +58,6 @@ class QPPCorrelationAnalyzer:
         """
         self.logger = logging.getLogger(__name__)
         self.dpi = dpi
-        
 
         # Validate input data
         if not qpp_scores:
@@ -92,60 +105,151 @@ class QPPCorrelationAnalyzer:
         self.align_qids()
 
     def calculate_correlations(self, 
-                             correlation_types: List[str] = ['pearson', 'spearman', 'kendall'],
-                             min_queries: int = 5,
-                             min_results_per_query: Optional[int] = None) -> Dict[str, pd.DataFrame]:
+                         correlation_types: List[str] = ['pearson', 'spearman', 'kendall'],
+                         min_queries: int = 5,
+                         min_results_per_query: Optional[int] = None,
+                         return_pvalues: bool = False) -> Union[Dict[str, pd.DataFrame], tuple]:
         """
         Calculate correlations between QPP scores and retrieval metrics.
-        
+
         Args:
-            correlation_types: List of correlation coefficients to compute
-            min_queries: Minimum number of queries required for correlation calculation
-            min_results_per_query: Minimum number of results required per query
+            return_pvalues: If True, returns a tuple (correlations, p_values)
         """
         correlations = {}
-        
+        p_values = {} if return_pvalues else None
+
         for corr_type in correlation_types:
             corr_df = pd.DataFrame(index=self.qpp_df.columns, columns=self.metrics_df.columns)
-            
+            pval_df = pd.DataFrame(index=self.qpp_df.columns, columns=self.metrics_df.columns) if return_pvalues else None
+
             for qpp_method in self.qpp_df.columns:
                 for metric in self.metrics_df.columns:
-                    # Filter out queries with insufficient results if threshold provided
                     valid_mask = ~(self.qpp_df[qpp_method].isna() | self.metrics_df[metric].isna())
-                    
                     x = self.qpp_df[qpp_method][valid_mask]
                     y = self.metrics_df[metric][valid_mask]
-                    
+
                     try:
                         if len(x) >= min_queries:
                             if corr_type == 'pearson':
-                                corr, p_value = stats.pearsonr(x, y)
+                                corr, pval = stats.pearsonr(x, y)
                             elif corr_type == 'spearman':
-                                corr, p_value = stats.spearmanr(x, y)
+                                corr, pval = stats.spearmanr(x, y)
                             else:  # kendall
-                                corr, p_value = stats.kendalltau(x, y)
-                                
-                            corr_df.loc[qpp_method, metric] = corr
+                                corr, pval = stats.kendalltau(x, y)
                             
-                            # Log if not significant
-                            if p_value >= 0.05:
-                                self.logger.info(
-                                    f"Non-significant correlation for {qpp_method} vs {metric} "
-                                    f"(p={p_value:.3f}, n={len(x)})"
-                                )
+                            corr_df.loc[qpp_method, metric] = corr
+                            if return_pvalues:
+                                pval_df.loc[qpp_method, metric] = pval
+
+                            # Logging (mantener existente)
                         else:
                             corr_df.loc[qpp_method, metric] = float('nan')
-                            self.logger.warning(
-                                f"Insufficient queries for {qpp_method} vs {metric} "
-                                f"(n={len(x)} < {min_queries})"
-                            )
+                            if return_pvalues:
+                                pval_df.loc[qpp_method, metric] = float('nan')
                     except Exception as e:
-                        self.logger.warning(f"Error calculating {corr_type} correlation: {e}")
                         corr_df.loc[qpp_method, metric] = float('nan')
-            
+                        if return_pvalues:
+                            pval_df.loc[qpp_method, metric] = float('nan')
+
             correlations[corr_type] = corr_df
-            
-        return correlations
+            if return_pvalues:
+                p_values[corr_type] = pval_df
+
+        return (correlations, p_values) if return_pvalues else correlations
+    
+    def plot_pvalue_heatmap(self, correlation_type: str = 'kendall', save_plot: bool = True) -> None:
+        """
+        Enhanced heatmap visualization of statistical significance with better categorical 
+        representation and improved visual hierarchy.
+        """
+        # Get p-values matrix
+        result = self.calculate_correlations([correlation_type], return_pvalues=True)
+        _, p_values = result
+        pval_df = p_values[correlation_type]
+        
+        # Preprocess p-values
+        pval_df = pval_df.apply(pd.to_numeric, errors='coerce').fillna(1)
+        pval_df = pval_df.replace(0.0, np.finfo(float).tiny)  # Avoid log(0)
+        
+        # Convert to Spanish method names
+        pval_df.index = pval_df.index.map(lambda x: METHOD_NAME_MAP.get(x, x))
+        
+        # Create significance categories
+        significance_bins = [1, 0.05, 0.01, 0.001, 0]
+        significance_labels = [
+            'No significativo (≥0.05)',
+            'Significativo (<0.05)',
+            'Muy significativo (<0.01)',
+            'Altamente significativo (<0.001)'
+        ]
+        
+        # Create annotated matrix with stars and categories
+        annot = pd.DataFrame(index=pval_df.index, columns=pval_df.columns)
+        category_matrix = pd.DataFrame(index=pval_df.index, columns=pval_df.columns)
+        
+        for col in pval_df.columns:
+            for idx in pval_df.index:
+                p = pval_df.loc[idx, col]
+                if p >= 0.05:
+                    annot.loc[idx, col] = '≥0.05'
+                    category = 0
+                elif 0.01 <= p < 0.05:
+                    annot.loc[idx, col] = '<0.05'
+                    category = 1
+                elif 0.001 <= p < 0.01:
+                    annot.loc[idx, col] = '<0.01'
+                    category = 2
+                else:
+                    annot.loc[idx, col] = '<0.001'  # For p < 0.001
+                    category = 3
+                category_matrix.loc[idx, col] = category
+
+        # Create visualization
+        plt.figure(figsize=(14, 10))
+        ax = plt.gca()
+        
+        # Custom colormap: white -> yellow -> orange -> red
+        cmap = sns.color_palette("rocket_r", n_colors=4)
+        
+        sns.heatmap(
+            category_matrix.astype(int),
+            annot=annot,
+            fmt='',
+            cmap=cmap,
+            cbar=False,
+            linewidths=0.5,
+            linecolor='lightgray',
+            annot_kws={'fontsize': 16, 'color': 'white', 'weight': 'bold'}
+        )
+        
+        # Add color bar with labels
+        cbar = ax.figure.colorbar(
+            ax.collections[0],
+            ticks=[0.375, 1.125, 1.875, 2.625],
+            shrink=0.8
+        )
+        cbar.ax.set_yticklabels(significance_labels)
+        cbar.ax.tick_params(labelsize=11)
+        cbar.ax.set_title('N. de significancia', fontsize=12)
+        
+        # Add significance threshold line
+        plt.axhline(y=0, color='white', linewidth=3, xmin=0, xmax=1)
+        
+        # Formatting
+        plt.title(f'Significancia Estadística - {correlation_type.capitalize()}\n', fontsize=16, pad=20)
+        plt.xticks(rotation=45, ha='right', fontsize=12)
+        plt.yticks(fontsize=12)
+        plt.xlabel('Métricas de Recuperación', fontsize=14)
+        plt.ylabel('Métodos QPP', fontsize=14)
+        plt.tight_layout()
+        
+        # Save/show plot
+        if save_plot and self.output_dir:
+            plt.savefig(os.path.join(self.output_dir, f'pvalues_qpp_{correlation_type}.pdf'), dpi=self.dpi)
+            plt.savefig(os.path.join(self.output_dir, f'pvalues_qpp_{correlation_type}.png'), dpi=self.dpi)
+            plt.close()
+        else:
+            plt.show()
 
     def plot_correlation_heatmap(self, correlation_type: str = 'kendall', 
                                save_plot: bool = True) -> None:
@@ -164,18 +268,87 @@ class QPPCorrelationAnalyzer:
         # Map method names to Spanish
         correlations.index = correlations.index.map(lambda x: METHOD_NAME_MAP.get(x, x))
         
-        plt.figure(figsize=(10, 8))
+        plt.figure(figsize=(12, 10))
         # Create mask for NaN values
         mask = np.isnan(correlations)
         
-        sns.heatmap(correlations, annot=True, cmap='RdYlBu', center=0, 
-                    vmin=-1, vmax=1, fmt='.3f', mask=mask)
-        plt.title(f'Correlación {correlation_type.capitalize()} entre QPP y Métricas de Recuperación')
+        sns.heatmap(
+            correlations,
+            annot=True,
+            annot_kws={"size": 12},
+            cmap='coolwarm',
+            center=0,
+            vmin=-1,
+            vmax=1,
+            fmt='.4f',
+            linewidths=0.5,
+            square=True,
+            mask=mask
+        )
+        plt.title(f'Correlación de {correlation_type.capitalize()} entre Métodos QPP y Métricas', pad=20)
+        plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
         
         if save_plot and self.output_dir:
             plt.savefig(os.path.join(self.output_dir, f'correlacion_qpp_{correlation_type}.pdf'), dpi=self.dpi)
             plt.savefig(os.path.join(self.output_dir, f'correlacion_qpp_{correlation_type}.png'), dpi=self.dpi)
+            plt.close()
+        else:
+            plt.show()
+
+    def plot_correlation_heatmap_horizontal(self, correlation_type: str = 'kendall', 
+                                          save_plot: bool = True) -> None:
+        """
+        Horizontal version of correlation heatmap optimized for thesis formatting.
+        """
+        correlations = self.calculate_correlations([correlation_type])[correlation_type]
+        correlations = correlations.apply(pd.to_numeric, errors='coerce')
+        
+        # Transpose matrix for horizontal layout
+        correlations = correlations.T  
+        
+        # Map method names to Spanish
+        correlations.columns = correlations.columns.map(lambda x: METHOD_NAME_MAP.get(x, x))
+        
+        plt.figure(figsize=(15, 8))
+        ax = sns.heatmap(
+            correlations,
+            annot=True,
+            annot_kws={"size": 11},
+            cmap='coolwarm',
+            center=0,
+            vmin=-1,
+            vmax=1,
+            fmt='.4f',
+            linewidths=0.5,
+            cbar_kws={'label': f'Correlación {correlation_type}', 'shrink': 0.8},
+            square=False
+        )
+        
+        # Rotate metric labels on x-axis
+        plt.xticks(rotation=45, ha='right', fontsize=12)
+        
+        # Adjust method labels on y-axis
+        plt.yticks(rotation=0, fontsize=12, va='center')
+        
+        # Adjust title and labels for horizontal layout
+        ax.set_title(f'Correlaciones {correlation_type.capitalize()} - Métodos QPP vs Métricas\n', 
+                   fontsize=14, pad=20)
+        ax.set_xlabel('Métodos QPP', fontsize=12)
+        ax.set_ylabel('Métricas de Recuperación', fontsize=12)
+        
+        # Move colorbar to bottom
+        cbar = ax.collections[0].colorbar
+        cbar.ax.set_ylabel(f'Correlación {correlation_type}', rotation=-90, va="bottom", labelpad=15)
+        cbar.ax.tick_params(labelsize=10)
+        
+        plt.tight_layout()
+        
+        if save_plot and self.output_dir:
+            plt.savefig(os.path.join(self.output_dir, f'correlacion_horizontal_{correlation_type}.pdf'), 
+                      dpi=self.dpi, bbox_inches='tight')
+            plt.savefig(os.path.join(self.output_dir, f'correlacion_horizontal_{correlation_type}.png'), 
+                      dpi=self.dpi, bbox_inches='tight')
             plt.close()
         else:
             plt.show()
@@ -190,7 +363,7 @@ class QPPCorrelationAnalyzer:
         """
         n_methods = len(self.qpp_df.columns)
         fig, axes = plt.subplots(
-            (n_methods + 2) // 3, 3,  # Create a 3-column grid
+            (n_methods + 2) // 3, 3,
             figsize=(15, 5 * ((n_methods + 2) // 3)),
             squeeze=False
         )
@@ -203,12 +376,13 @@ class QPPCorrelationAnalyzer:
                 x=self.qpp_df[qpp_method],
                 y=self.metrics_df[metric],
                 ax=ax,
-                scatter_kws={'alpha': 0.5}
+                scatter_kws={'alpha': 0.6, 'color': '#3498db'},
+                line_kws={'color': '#e67e22', 'linewidth': 2}
             )
             
             corr, _ = stats.kendalltau(self.qpp_df[qpp_method], self.metrics_df[metric])
             method_name = METHOD_NAME_MAP.get(qpp_method, qpp_method)
-            ax.set_title(f'{method_name}\nτ = {corr:.3f}')
+            ax.set_title(f'{method_name}\nτ = {corr:.4f}', fontsize=14, pad=10)
             ax.set_xlabel('Puntuación QPP')
             ax.set_ylabel(f'Puntuación {metric}')
             
@@ -219,16 +393,125 @@ class QPPCorrelationAnalyzer:
         plt.tight_layout()
         
         if save_plots and self.output_dir:
-            plt.savefig(os.path.join(self.output_dir, f'dispersion_qpp_{metric}.pdf'), dpi=self.dpi)
-            plt.savefig(os.path.join(self.output_dir, f'dispersion_qpp_{metric}.png'), dpi=self.dpi)
+            # Guardar gráfico combinado
+            combined_path = os.path.join(self.output_dir, f'dispersion_qpp_{metric}')
+            plt.savefig(f'{combined_path}.pdf', dpi=self.dpi)
+            plt.savefig(f'{combined_path}.png', dpi=self.dpi)
+            plt.close()
+            
+            # Crear subcarpeta para gráficos individuales
+            scatter_dir = os.path.join(self.output_dir, 'scatter_individual')
+            ensure_dir(scatter_dir)
+            
+            # Generar gráficos individuales
+            for qpp_method in self.qpp_df.columns:
+                plt.figure(figsize=(8, 6))
+                ax = plt.gca()
+                
+                sns.regplot(
+                    x=self.qpp_df[qpp_method],
+                    y=self.metrics_df[metric],
+                    ax=ax,
+                    scatter_kws={'alpha': 0.6, 'color': '#3498db'},
+                    line_kws={'color': '#e67e22', 'linewidth': 2}
+                )
+                
+                corr, _ = stats.kendalltau(self.qpp_df[qpp_method], self.metrics_df[metric])
+                method_name = METHOD_NAME_MAP.get(qpp_method, qpp_method)
+                ax.set_title(f'{method_name}\nτ = {corr:.4f}', fontsize=14, pad=10)
+                ax.set_xlabel('Puntuación QPP')
+                ax.set_ylabel(f'Puntuación {metric}')
+                plt.tight_layout()
+                
+                # Guardar gráfico individual
+                filename = f'scatter_{metric}_{qpp_method}'
+                plt.savefig(
+                    os.path.join(scatter_dir, f'{filename}.png'), 
+                    dpi=self.dpi
+                )
+                plt.close()
+                
+        else:
+            plt.show()
+
+    def plot_correlations_boxplot(self, correlation_type: str = 'kendall', save_plot: bool = True) -> None:
+        # Get correlations
+        correlations = self.calculate_correlations([correlation_type])[correlation_type]
+        
+        # Convert to numeric, replacing any remaining non-numeric values with NaN
+        correlations = correlations.apply(pd.to_numeric, errors='coerce')
+        
+        # Create figure
+        plt.figure(figsize=(14, 8))
+        
+        # Sort methods by median correlation value
+        method_medians = correlations.median(axis=1)
+        sorted_methods = method_medians.sort_values().index.tolist()
+        
+        # Prepare data for boxplot
+        plot_data = []
+        labels = []
+        
+        for method in sorted_methods:
+            data = correlations.loc[method].dropna()
+            if len(data) > 0:  # Only include methods with valid data
+                plot_data.append(data)
+                labels.append(method)
+        
+        # Map method names to Spanish
+        labels = [METHOD_NAME_MAP.get(method, method) for method in labels]
+        
+        # Create boxplot
+        bp = plt.boxplot(plot_data, labels=labels, patch_artist=True, widths=0.6)
+        
+        # Customize boxplot colors
+        for box in bp['boxes']:
+            box.set(facecolor='#2ecc71', linewidth=2, alpha=0.7)
+        
+        # Dibujar los puntos individuales
+        for i, data in enumerate(plot_data):
+            x = np.random.normal(i + 1, 0.04, size=len(data))  # Pequeño jitter en el eje X
+            plt.plot(x, data, 'o', color='#3498db', alpha=0.6)  # Puntos azules con transparencia
+        
+        # Customize plot
+        plt.ylabel(f'Correlación {correlation_type.capitalize()}', labelpad=15)
+        plt.xlabel('Método QPP', labelpad=15)
+        plt.xticks(rotation=45, ha='right', fontsize=12)
+        plt.title("Distribución de Correlaciones por Método QPP", fontsize=18, pad=20)
+        plt.grid(True, axis='y')
+        
+        # Add horizontal line at y=0 for reference
+        plt.axhline(0, color='#e74c3c', linestyle='--', alpha=0.8, linewidth=1.5)
+        
+        y_min = min([min(data) for data in plot_data]) - 0.1  # Add a small buffer below
+        y_max = max([max(data) for data in plot_data]) + 0.1  # Add a small buffer above
+        plt.ylim(y_min, y_max)
+        
+        # Adjust layout
+        plt.tight_layout()
+        
+        if save_plot and self.output_dir:
+            plt.savefig(os.path.join(self.output_dir, f'correlaciones_qpp_boxplot_{correlation_type}.pdf'), dpi=self.dpi)
+            plt.savefig(os.path.join(self.output_dir, f'correlaciones_qpp_boxplot_{correlation_type}.png'), dpi=self.dpi)
             plt.close()
         else:
             plt.show()
 
+    def align_qids(self):
+        """
+        Align QIDs between QPP scores and retrieval metrics.
+        """
+        # Align QIDs
+        common_qids = self.qpp_df.index.intersection(self.metrics_df.index)
+        self.qpp_df = self.qpp_df.loc[common_qids]
+        self.metrics_df = self.metrics_df.loc[common_qids]
+        
+        self.logger.info(f"Number of QIDs after alignment: {len(common_qids)}")
+    
     def generate_report(self, correlation_types: List[str] = ['kendall']) -> None:
         """
         Generate a comprehensive correlation analysis report.
-        
+
         Args:
             correlation_types: List of correlation types to include in report
         """
@@ -237,7 +520,7 @@ class QPPCorrelationAnalyzer:
             return
             
         correlations = self.calculate_correlations(correlation_types)
-        
+
         with open(os.path.join(self.output_dir, 'informe_correlacion_qpp.txt'), 'w') as f:
             f.write("Informe de Análisis de Correlación QPP\n")
             f.write("=====================================\n\n")
@@ -273,177 +556,6 @@ class QPPCorrelationAnalyzer:
             
             for corr_type in correlation_types:
                 self.plot_correlation_heatmap(corr_type)
-
-    def plot_correlations_boxplot(self, correlation_type: str = 'kendall', save_plot: bool = True) -> None:
-        """
-        Plot boxplot of correlations between QPP methods and retrieval metrics.
-        Similar to the original plot_correlations function but adapted for a single dataset.
-        
-        Args:
-            correlation_type: Type of correlation to use ('kendall', 'spearman', or 'pearson')
-            save_plot: Whether to save the plot to file
-        """
-        # Get correlations
-        correlations = self.calculate_correlations([correlation_type])[correlation_type]
-        
-        # Convert to numeric, replacing any remaining non-numeric values with NaN
-        correlations = correlations.apply(pd.to_numeric, errors='coerce')
-        
-        # Create figure
-        plt.figure(num=None, figsize=(16, 9), dpi=100, facecolor='w', edgecolor='k')
-        
-        # Sort methods by median correlation value
-        method_medians = correlations.median(axis=1)
-        sorted_methods = method_medians.sort_values().index.tolist()
-        
-        # Prepare data for boxplot
-        plot_data = []
-        labels = []
-        
-        for method in sorted_methods:
-            data = correlations.loc[method].dropna()
-            if len(data) > 0:  # Only include methods with valid data
-                plot_data.append(data)
-                labels.append(method)
-        
-        # Map method names to Spanish
-        labels = [METHOD_NAME_MAP.get(method, method) for method in labels]
-        
-        # Create boxplot
-        bp = plt.boxplot(plot_data, labels=labels, patch_artist=True)
-        
-        # Customize boxplot colors
-        for box in bp['boxes']:
-            box.set(facecolor='lightblue', alpha=0.7)
-        
-        # Customize plot
-        plt.ylabel(f'Correlación {correlation_type.capitalize()}', fontsize=16)
-        plt.xlabel('Método QPP', fontsize=16)
-        plt.xticks(rotation=45, ha='right')
-        plt.title(f'Rendimiento de Métodos QPP a través de Métricas')
-        plt.grid(True, axis='y')
-        
-        # Add horizontal line at y=0 for reference
-        plt.axhline(y=0, color='r', linestyle='--', alpha=0.3)
-        
-        # Set y-axis limits to include all data with some padding
-        plt.ylim(min(correlations.min().min() - 0.1, -1), max(correlations.max().max() + 0.1, 1))
-        
-        # Adjust layout
-        plt.tight_layout()
-        
-        if save_plot and self.output_dir:
-            plt.savefig(os.path.join(self.output_dir, f'correlaciones_qpp_boxplot_{correlation_type}.pdf'), dpi=self.dpi)
-            plt.savefig(os.path.join(self.output_dir, f'correlaciones_qpp_boxplot_{correlation_type}.png'), dpi=self.dpi)
-            plt.close()
-        else:
-            plt.show()
-
-    @staticmethod
-    def plot_correlations_across_datasets(
-        datasets: Dict[str, 'QPPCorrelationAnalyzer'],
-        correlation_type: str = 'kendall',
-        output_dir: str = None,
-        dpi: int = 300
-    ) -> None:
-        """
-        Plot correlations across multiple datasets.
-        
-        Args:
-            datasets: Dictionary mapping dataset names to their QPPCorrelationAnalyzer instances
-            correlation_type: Type of correlation to plot
-            output_dir: Directory to save the plot
-            dpi: DPI for saved plots
-        """
-        # Collect correlations from all datasets
-        dataset_correlations = {}
-        all_methods = set()
-        
-        for dataset_name, analyzer in datasets.items():
-            correlations = analyzer.calculate_correlations([correlation_type])[correlation_type]
-            dataset_correlations[dataset_name] = correlations
-            all_methods.update(correlations.index)
-        
-        # Sort methods by median correlation across all datasets
-        all_values = []
-        for correlations in dataset_correlations.values():
-            all_values.extend(correlations.values.flatten())
-        median_by_method = {}
-        for method in all_methods:
-            method_values = []
-            for correlations in dataset_correlations.values():
-                if method in correlations.index:
-                    method_values.extend(correlations.loc[method].dropna())
-            median_by_method[method] = np.nanmedian(method_values)
-        
-        sorted_methods = sorted(all_methods, key=lambda x: median_by_method[x])
-        
-        # Prepare data for plotting
-        n_methods = len(sorted_methods)
-        n_datasets = len(datasets)
-        
-        # Create figure
-        plt.figure(num=None, figsize=(16, 9), dpi=100, facecolor='w', edgecolor='k')
-        
-        # Position for each dataset's box
-        positions = np.arange(n_methods)
-        width = 0.8 / n_datasets
-        
-        # Plot each dataset
-        for i, (dataset_name, correlations) in enumerate(dataset_correlations.items()):
-            plot_data = []
-            for method in sorted_methods:
-                if method in correlations.index:
-                    plot_data.append(correlations.loc[method].dropna())
-                else:
-                    plot_data.append([])
-            
-            # Create boxplot
-            bp = plt.boxplot(plot_data,
-                            positions=positions + (i - n_datasets/2 + 0.5) * width,
-                            widths=width,
-                            patch_artist=True,
-                            label=dataset_name)
-            
-            # Set colors
-            color = plt.cm.Set3(i / n_datasets)
-            for box in bp['boxes']:
-                box.set(facecolor=color, alpha=0.7)
-        
-        # Customize plot
-        plt.ylabel(f'{correlation_type.capitalize()} Correlation', fontsize=16)
-        plt.xlabel('QPP Method', fontsize=16)
-        plt.xticks(positions, sorted_methods, rotation=45, ha='right')
-        plt.title(f'QPP Method Performance across Datasets and Metrics')
-        plt.grid(True, axis='y')
-        
-        # Add horizontal line at y=0 for reference
-        plt.axhline(y=0, color='r', linestyle='--', alpha=0.3)
-        
-        # Add legend
-        plt.legend()
-        
-        # Set y-axis limits
-        all_values = np.array(all_values)
-        plt.ylim(min(np.nanmin(all_values) - 0.1, -1), max(np.nanmax(all_values) + 0.1, 1))
-        
-        # Adjust layout
-        plt.tight_layout()
-        
-        if output_dir:
-            plt.savefig(os.path.join(output_dir, f'qpp_correlations_across_datasets_{correlation_type}.pdf'), dpi=dpi)
-            plt.savefig(os.path.join(output_dir, f'qpp_correlations_across_datasets_{correlation_type}.png'), dpi=dpi)
-            plt.close()
-        else:
-            plt.show()
-
-    def align_qids(self):
-        """
-        Align QIDs between QPP scores and retrieval metrics.
-        """
-        # Align QIDs
-        common_qids = self.qpp_df.index.intersection(self.metrics_df.index)
-        self.qpp_df = self.qpp_df.loc[common_qids]
-        self.metrics_df = self.metrics_df.loc[common_qids]
-        
-        self.logger.info(f"Number of QIDs after alignment: {len(common_qids)}")
+                self.plot_correlation_heatmap_horizontal(corr_type)
+                self.plot_correlations_boxplot(corr_type)
+                self.plot_pvalue_heatmap(corr_type)

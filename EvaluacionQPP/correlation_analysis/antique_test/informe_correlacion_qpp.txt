@@ -17,7 +17,7 @@ NQC: 180 consultas
 Clarity: 180 consultas
 UEF-WIG: 180 consultas
 UEF-NQC: 180 consultas
-uef_clarity: 180 consultas
+UEF-Clarity: 180 consultas
 
 Valores de correlación (solo estadísticamente significativos):
                ndcg@10        ap
@@ -30,7 +30,7 @@ NQC           0.400721  0.373052
 Clarity       0.289016  0.315306
 UEF-WIG       0.252688  0.225714
 UEF-NQC       0.424453  0.388327
-uef_clarity   0.302684  0.316423
+UEF-Clarity   0.302684  0.316423
 
 Estadísticas Resumen:
 Mejor método QPP: UEF-NQC
