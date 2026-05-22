@@ -1,0 +1,33 @@
+.git
+.gitignore
+.github
+.vscode
+.idea
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.log
+.env
+.venv
+venv/
+env/
+
+# Host-side docker bind-mount target
+docker-output/
+
+# Project outputs — regenerated at runtime
+EvaluacionQPP/indices/
+EvaluacionQPP/logs/
+EvaluacionQPP/evaluation_results/
+EvaluacionQPP/correlation_analysis/
+EvaluacionQPP/sample_term_frequencies.json
+indices/
+logs/
+evaluation_results/
+correlation_analysis/
+
+# Docker
+Dockerfile
+.dockerignore

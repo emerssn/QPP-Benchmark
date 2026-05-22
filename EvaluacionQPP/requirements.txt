@@ -15,7 +15,7 @@ idna==3.10
 ijson==3.3.0
 importlib_resources==6.5.2
 inscriptis==2.5.1
-ir_datasets==0.5.9
+ir_datasets>=0.5.10
 ir_measures==0.3.6
 Jinja2==3.1.5
 joblib==1.4.2
