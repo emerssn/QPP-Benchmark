@@ -1,1 +1,9 @@
 .venv/
+*.json
+*.md
+*.typ
+*.txt
+*.png
+*.pdf
+*.pyc
+*.log

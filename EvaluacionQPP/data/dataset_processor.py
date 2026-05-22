@@ -1,6 +1,7 @@
 import pyterrier as pt
 import pandas as pd
 from .iquique_dataset import IquiqueDataset
+from EvaluacionQPP.utils.config import AVAILABLE_DATASETS, DATASET_FORMATS
 from EvaluacionQPP.utils.text_processing import preprocess_text
 import warnings
 
@@ -12,6 +13,8 @@ class DatasetProcessor:
         Args:
             dataset_name (str): Name/identifier of the dataset to process
         """
+        # Keep original path for config lookup
+        self.dataset_path = dataset_name
         if dataset_name == "iquique_dataset":
             self.dataset = IquiqueDataset()
         elif dataset_name.startswith("irds:"):
@@ -34,7 +37,42 @@ class DatasetProcessor:
         queries = {}
         
         if isinstance(topics, pd.DataFrame):
-            raw_queries = dict(zip(topics['qid'], topics['query']))
+            # Compose 'query' column if missing (e.g., CAR has title/headings/text)
+            if 'query' not in topics.columns:
+                # Resolve dataset key for strategy
+                dataset_key = next((k for k, v in AVAILABLE_DATASETS.items() if v == self.dataset_path), None)
+                strategy = DATASET_FORMATS.get(dataset_key, {}).get('query_field_strategy', None)
+                # Default to title+headings for CAR-like datasets
+                if strategy is None and any(c in topics.columns for c in ['title', 'headings', 'text']):
+                    strategy = 'title+headings'
+                if strategy:
+                    def to_str(x):
+                        if isinstance(x, (list, tuple)):
+                            return ' '.join([str(t) for t in x if pd.notna(t)])
+                        return '' if pd.isna(x) else str(x)
+                    title_col = topics['title'] if 'title' in topics.columns else pd.Series([''] * len(topics))
+                    headings_col = topics['headings'] if 'headings' in topics.columns else pd.Series([''] * len(topics))
+                    text_col = topics['text'] if 'text' in topics.columns else pd.Series([''] * len(topics))
+                    # Build composed query
+                    if strategy == 'title+headings':
+                        topics['query'] = title_col.fillna('').astype(str) + ' ' + headings_col.apply(to_str)
+                    elif strategy == 'title':
+                        topics['query'] = title_col.fillna('').astype(str)
+                    elif strategy == 'text':
+                        topics['query'] = text_col.fillna('').astype(str)
+                    else:
+                        topics['query'] = title_col.fillna('').astype(str) + ' ' + headings_col.apply(to_str)
+                    # One-line diagnostic print with avg lengths
+                    try:
+                        avg_title = float(title_col.fillna('').astype(str).str.len().mean()) if 'title' in topics.columns else 0.0
+                        avg_head = float(headings_col.apply(to_str).str.len().mean()) if 'headings' in topics.columns else 0.0
+                        avg_text = float(text_col.fillna('').astype(str).str.len().mean()) if 'text' in topics.columns else 0.0
+                        print(f"CAR queries: strategy={strategy} | avg_len title={avg_title:.1f}, headings={avg_head:.1f}, text={avg_text:.1f}")
+                    except Exception:
+                        pass
+                else:
+                    raise ValueError("Topics DataFrame lacks 'query' and no strategy to compose it.")
+            raw_queries = dict(zip(topics['qid'].astype(str), topics['query']))
         elif isinstance(topics, dict):
             raw_queries = topics
         elif isinstance(topics, list):
@@ -63,6 +101,19 @@ class DatasetProcessor:
     def get_raw_queries(self):
         """Get original unprocessed queries for retrieval."""
         queries = self.get_queries()
+        # For CAR datasets, avoid TerrierQL parsing issues (e.g., '/' in headings)
+        # by using preprocessed tokens as the retrieval query string.
+        dataset_path_str = str(self.dataset_path)
+        if dataset_path_str.startswith("irds:car/") or "car/v1.5" in dataset_path_str:
+            raw_map = {qid: ' '.join(query['processed']) for qid, query in queries.items()}
+            # Single diagnostic line
+            try:
+                lengths = [len(v) for v in raw_map.values()]
+                avg_len = sum(lengths) / max(1, len(lengths))
+                print(f"CAR retrieval: using preprocessed tokens as query (avg_len={avg_len:.1f})")
+            except Exception:
+                pass
+            return raw_map
         return {qid: query['raw'] for qid, query in queries.items()}
 
     def get_processed_queries(self):

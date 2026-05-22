@@ -34,6 +34,12 @@ METHOD_NAME_MAP = {
     'uef_clarity': 'UEF-Clarity'
 }
 
+# Mapeo simple para nombres de métricas en gráficos/leyendas
+METRIC_LABEL_MAP = {
+    'ap': 'AP',   # Average Precision por consulta
+    'map': 'MAP',
+}
+
 class QPPCorrelationAnalyzer:
     """
     Analyzes correlations between QPP predictions and retrieval effectiveness metrics (nDCG and AP).
@@ -170,6 +176,9 @@ class QPPCorrelationAnalyzer:
         # Preprocess p-values
         pval_df = pval_df.apply(pd.to_numeric, errors='coerce').fillna(1)
         pval_df = pval_df.replace(0.0, np.finfo(float).tiny)  # Avoid log(0)
+
+        # Usar etiquetas amigables para las métricas (AP/MAP)
+        pval_df.columns = [METRIC_LABEL_MAP.get(c, c) for c in pval_df.columns]
         
         # Convert to Spanish method names
         pval_df.index = pval_df.index.map(lambda x: METHOD_NAME_MAP.get(x, x))
@@ -267,6 +276,8 @@ class QPPCorrelationAnalyzer:
         
         # Map method names to Spanish
         correlations.index = correlations.index.map(lambda x: METHOD_NAME_MAP.get(x, x))
+        # Map metric names to etiquetas legibles (AP/MAP)
+        correlations.columns = [METRIC_LABEL_MAP.get(c, c) for c in correlations.columns]
         
         plt.figure(figsize=(12, 10))
         # Create mask for NaN values
@@ -309,6 +320,8 @@ class QPPCorrelationAnalyzer:
         
         # Map method names to Spanish
         correlations.columns = correlations.columns.map(lambda x: METHOD_NAME_MAP.get(x, x))
+        # Map metric names (ahora en índice) a etiquetas legibles
+        correlations.index = [METRIC_LABEL_MAP.get(i, i) for i in correlations.index]
         
         plt.figure(figsize=(15, 8))
         ax = sns.heatmap(
@@ -362,6 +375,7 @@ class QPPCorrelationAnalyzer:
             save_plots: Whether to save the plots to files
         """
         n_methods = len(self.qpp_df.columns)
+        metric_label = METRIC_LABEL_MAP.get(metric, metric)
         fig, axes = plt.subplots(
             (n_methods + 2) // 3, 3,
             figsize=(15, 5 * ((n_methods + 2) // 3)),
@@ -384,7 +398,7 @@ class QPPCorrelationAnalyzer:
             method_name = METHOD_NAME_MAP.get(qpp_method, qpp_method)
             ax.set_title(f'{method_name}\nτ = {corr:.4f}', fontsize=14, pad=10)
             ax.set_xlabel('Puntuación QPP')
-            ax.set_ylabel(f'Puntuación {metric}')
+            ax.set_ylabel(f'Puntuación {metric_label}')
             
         # Remove empty subplots
         for idx in range(n_methods, len(axes.flat)):
@@ -420,7 +434,7 @@ class QPPCorrelationAnalyzer:
                 method_name = METHOD_NAME_MAP.get(qpp_method, qpp_method)
                 ax.set_title(f'{method_name}\nτ = {corr:.4f}', fontsize=14, pad=10)
                 ax.set_xlabel('Puntuación QPP')
-                ax.set_ylabel(f'Puntuación {metric}')
+                ax.set_ylabel(f'Puntuación {metric_label}')
                 plt.tight_layout()
                 
                 # Guardar gráfico individual
@@ -547,7 +561,7 @@ class QPPCorrelationAnalyzer:
                 best_method = corr_df.mean(axis=1).idxmax()
                 best_metric = corr_df.mean(axis=0).idxmax()
                 f.write(f"Mejor método QPP: {METHOD_NAME_MAP.get(best_method, best_method)}\n")
-                f.write(f"Métrica más predecible: {best_metric}\n")
+                f.write(f"Métrica más predecible: {METRIC_LABEL_MAP.get(best_metric, best_metric)}\n")
                 f.write("\n")
                 
             # Generate plots

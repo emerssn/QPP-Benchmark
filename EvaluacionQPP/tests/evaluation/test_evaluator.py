@@ -69,7 +69,8 @@ class TestEvaluator(unittest.TestCase):
             self.qrels,
             self.perfect_run,
             metrics=['ndcg@10'],
-            dataset_name="iquique_dataset"
+            dataset_name="iquique_dataset",
+            min_results=1
         )
         
         ndcg_score = results['ndcg@10']['mean']
@@ -87,7 +88,8 @@ class TestEvaluator(unittest.TestCase):
             self.qrels,
             self.reversed_run,
             metrics=['ndcg@10'],
-            dataset_name="iquique_dataset"
+            dataset_name="iquique_dataset",
+            min_results=1
         )
         
         ndcg_score = results['ndcg@10']['mean']
@@ -105,7 +107,8 @@ class TestEvaluator(unittest.TestCase):
             self.qrels,
             self.perfect_run,
             metrics=['ap'],
-            dataset_name="iquique_dataset"
+            dataset_name="iquique_dataset",
+            min_results=1
         )
         
         ap_score = results['ap']['mean']
@@ -123,7 +126,8 @@ class TestEvaluator(unittest.TestCase):
             self.qrels,
             self.reversed_run,
             metrics=['ap'],
-            dataset_name="iquique_dataset"
+            dataset_name="iquique_dataset",
+            min_results=1
         )
         
         ap_score = results['ap']['mean']
@@ -142,7 +146,8 @@ class TestEvaluator(unittest.TestCase):
             self.qrels,
             self.perfect_run,
             metrics=metrics,
-            dataset_name="iquique_dataset"
+            dataset_name="iquique_dataset",
+            min_results=1
         )
         
         for metric in metrics:

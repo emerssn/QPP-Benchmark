@@ -25,19 +25,53 @@ class IquiqueDataset:
             {"qid": "0", "query": "playa cavancha iquique"},
             {"qid": "1", "query": "zona franca zofri"},
             {"qid": "2", "query": "museo historia iquique"},
-            {"qid": "3", "query": "historia salitre guerra pacifico"}
+            {"qid": "3", "query": "historia salitre guerra pacifico"},
+            {"qid": "4", "query": "clima temperatura iquique"},
+            {"qid": "5", "query": "patrimonio cultural pampino"},
+            {"qid": "6", "query": "comercio norte chile sudamerica"},
+            {"qid": "7", "query": "combate naval peru chile"}
         ])
         
-        # Juicios de relevancia de muestra (qrels)
+        # Juicios de relevancia multinivel (0=no relevante, 1=marginalmente, 2=relevante, 3=altamente relevante)
         self.qrels = pd.DataFrame([
-            {"qid": "0", "doc_id": "doc2", "relevance": 1},
-            {"qid": "1", "doc_id": "doc1", "relevance": 1},
-            {"qid": "2", "doc_id": "doc3", "relevance": 1},
-            {"qid": "2", "doc_id": "doc0", "relevance": 1},
-            {"qid": "3", "doc_id": "doc3", "relevance": 1},
-            {"qid": "3", "doc_id": "doc5", "relevance": 1},
-            {"qid": "3", "doc_id": "doc6", "relevance": 2},
-            {"qid": "3", "doc_id": "doc7", "relevance": 1}
+            # Query 0: playa cavancha iquique
+            {"qid": "0", "doc_id": "doc2", "relevance": 3},  # Playa Cavancha - altamente relevante
+            {"qid": "0", "doc_id": "doc0", "relevance": 1},  # Ciudad de Iquique - marginalmente relevante
+            {"qid": "0", "doc_id": "doc4", "relevance": 1},  # Clima costero - marginalmente relevante
+            
+            # Query 1: zona franca zofri
+            {"qid": "1", "doc_id": "doc1", "relevance": 3},  # ZOFRI - altamente relevante
+            {"qid": "1", "doc_id": "doc0", "relevance": 1},  # Ciudad portuaria - marginalmente relevante
+            
+            # Query 2: museo historia iquique
+            {"qid": "2", "doc_id": "doc3", "relevance": 3},  # Museo Regional - altamente relevante
+            {"qid": "2", "doc_id": "doc0", "relevance": 2},  # Capital de región - relevante
+            {"qid": "2", "doc_id": "doc6", "relevance": 2},  # Industria salitre historia - relevante
+            {"qid": "2", "doc_id": "doc7", "relevance": 1},  # Patrimonio histórico - marginalmente
+            
+            # Query 3: historia salitre guerra pacifico
+            {"qid": "3", "doc_id": "doc6", "relevance": 3},  # Industria salitre - altamente relevante
+            {"qid": "3", "doc_id": "doc5", "relevance": 3},  # Guerra del Pacífico - altamente relevante
+            {"qid": "3", "doc_id": "doc3", "relevance": 2},  # Museo época salitre - relevante
+            {"qid": "3", "doc_id": "doc7", "relevance": 2},  # Época salitrera - relevante
+            
+            # Query 4: clima temperatura iquique
+            {"qid": "4", "doc_id": "doc4", "relevance": 3},  # Clima desértico - altamente relevante
+            {"qid": "4", "doc_id": "doc0", "relevance": 1},  # Norte de Chile - marginalmente
+            
+            # Query 5: patrimonio cultural pampino
+            {"qid": "5", "doc_id": "doc7", "relevance": 3},  # Patrimonio pampino - altamente relevante
+            {"qid": "5", "doc_id": "doc3", "relevance": 2},  # Cultura Chinchorro - relevante
+            {"qid": "5", "doc_id": "doc6", "relevance": 2},  # Inmigrantes, historia - relevante
+            
+            # Query 6: comercio norte chile sudamerica
+            {"qid": "6", "doc_id": "doc1", "relevance": 3},  # ZOFRI comercio - altamente relevante
+            {"qid": "6", "doc_id": "doc0", "relevance": 2},  # Ciudad portuaria norte - relevante
+            {"qid": "6", "doc_id": "doc6", "relevance": 1},  # Inmigrantes, comercio - marginalmente
+            
+            # Query 7: combate naval peru chile
+            {"qid": "7", "doc_id": "doc5", "relevance": 3},  # Combate naval 1879 - altamente relevante
+            {"qid": "7", "doc_id": "doc3", "relevance": 1},  # Museo historia - marginalmente
         ])
     
     def get_corpus_iter(self) -> Iterable[Dict[str, str]]:

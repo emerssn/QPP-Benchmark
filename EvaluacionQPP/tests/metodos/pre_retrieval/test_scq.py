@@ -25,8 +25,11 @@ class TestSCQ(unittest.TestCase):
         cls.test_index_path = os.path.join(script_dir, "..", "..", "..", "indices", "test_index")
         
         # Clean up any existing index
-        if os.path.exists(cls.test_index_path):
-            shutil.rmtree(cls.test_index_path)
+        try:
+            if os.path.exists(cls.test_index_path):
+                shutil.rmtree(cls.test_index_path)
+        except PermissionError:
+            pass
         
         # Ensure the directory exists
         os.makedirs(os.path.dirname(cls.test_index_path), exist_ok=True)
@@ -56,8 +59,11 @@ class TestSCQ(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         """Clean up after all tests"""
-        if os.path.exists(cls.test_index_path):
-            shutil.rmtree(cls.test_index_path)
+        try:
+            if os.path.exists(cls.test_index_path):
+                shutil.rmtree(cls.test_index_path)
+        except PermissionError:
+            pass
 
     def test_compute_score_single_term(self):
         """Test SCQ score computation for single terms"""

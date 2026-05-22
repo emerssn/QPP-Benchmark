@@ -8,6 +8,7 @@ import logging
 
 from EvaluacionQPP.data.dataset_processor import DatasetProcessor
 from EvaluacionQPP.indexing.index_builder import IndexBuilder
+from EvaluacionQPP.evaluation.qrels_difficulty_analyzer import QrelsDifficultyAnalyzer
 from EvaluacionQPP.metodos.qpp_factory import QPPMethodFactory
 from EvaluacionQPP.retrieval.retrieval import get_batch_scores
 from EvaluacionQPP.evaluation.evaluator import evaluate_results
@@ -37,13 +38,13 @@ def setup_logging(log_file='loaded_index.log'):
         log_path = os.path.join(script_dir, 'logs')
         os.makedirs(log_path, exist_ok=True)
         log_file_path = os.path.join(log_path, log_file)
-        
+
         # File handler
-        file_handler = logging.FileHandler(log_file_path, mode='w')
+        file_handler = logging.FileHandler(log_file_path, mode='w', encoding='utf-8')
         file_handler.setFormatter(formatter)
         root.addHandler(file_handler)
         print(f"Logging to file: {log_file_path}")
-        
+
     except Exception as e:
         print(f"Warning: Could not create log file ({e}). Logging to console only.")
     
@@ -153,13 +154,29 @@ def process_dataset(dataset_name: str, dataset_path: str, args) -> QPPCorrelatio
                             (m.startswith('ndcg@') or m == 'ap')]
         evaluation_metrics.extend(additional_metrics)
     
+    # Asegurar que las métricas para dificultad estén incluidas si son compatibles
+    difficulty_metrics = getattr(args, "difficulty_metric", None)
+    valid_difficulty_metrics = []
+    if difficulty_metrics:
+        for m in difficulty_metrics:
+            if m == 'ap' or m.startswith('ndcg@'):
+                valid_difficulty_metrics.append(m)
+                if m not in evaluation_metrics:
+                    evaluation_metrics.append(m)
+            else:
+                print(f"WARNING: difficulty metric '{m}' is not supported. "
+                      "Use 'ap' o 'ndcg@k'. Ignorando esta métrica.")
+        if not valid_difficulty_metrics:
+            difficulty_metrics = None
+        else:
+            difficulty_metrics = valid_difficulty_metrics
 
     # Evaluate results with num_results parameter
     evaluation_results = evaluate_results(
         qrels_df=qrels,
         results_df=retrieval_results,
         metrics=evaluation_metrics,
-        output_dir=os.path.join(script_dir, "evaluation_results"),
+        output_dir=os.path.join(script_dir, "evaluation_results", dataset_name),
         dataset_name=dataset_name,
         min_results=args.num_results  # Pass num_results parameter
     )
@@ -176,6 +193,20 @@ def process_dataset(dataset_name: str, dataset_path: str, args) -> QPPCorrelatio
     # Before creating QPP factory
     if 'text' not in retrieval_results.columns:
         print("WARNING: 'text' field missing from retrieval results!")
+    
+    # Análisis adicional de qrels y dificultad de consulta
+    if not args.skip_plots:
+        qrels_output_dir = os.path.join(
+            script_dir, "evaluation_results", dataset_name
+        )
+        qrels_analyzer = QrelsDifficultyAnalyzer(
+            qrels_df=qrels,
+            evaluation_results=evaluation_results,
+            dataset_name=dataset_name,
+            output_dir=qrels_output_dir,
+            difficulty_metrics=difficulty_metrics
+        )
+        qrels_analyzer.generate_all_plots()
     
     # Create QPP factory with preprocessed queries
     qpp_factory = QPPMethodFactory(
@@ -231,12 +262,16 @@ def main():
                        help='Correlation coefficients to compute (default: kendall)')
     
     # Analysis options
-    parser.add_argument('--use-uef', action='store_true',
-                       help='Enable UEF-based QPP methods')
+    # Español: UEF se habilita por defecto; el flag se mantiene por compatibilidad.
+    parser.add_argument('--use-uef', action='store_true', default=True,
+                       help='Enable UEF-based QPP methods (enabled by default)')
     parser.add_argument('--skip-plots', action='store_true',
                        help='Skip generating plots')
     parser.add_argument('--output-dir', type=str, default=None,
                        help='Custom output directory for results')
+    parser.add_argument('--difficulty-metric', nargs='+', default=None,
+                       help="Metrics to define query difficulty (e.g. 'ap' or 'ndcg@10'). "
+                            "Default: all available metrics.")
     
     # Add new arguments for method-specific list sizes
     parser.add_argument('--wig-list-size', type=int, default=5,

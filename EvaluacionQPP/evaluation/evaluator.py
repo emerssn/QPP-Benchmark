@@ -150,7 +150,7 @@ def evaluate_results(
             json.dump(results, f, indent=2)
         
         # Generate visualizations
-        visualizer = RetrievalMetricsVisualizer(results, output_dir)
+        visualizer = RetrievalMetricsVisualizer(results, output_dir, dataset_name)
         visualizer.generate_all_plots(save=True)
     
     return results

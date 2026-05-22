@@ -21,16 +21,16 @@ UEF-Clarity: 180 consultas
 
 Valores de correlación (solo estadísticamente significativos):
                ndcg@10        ap
-IDF Promedio  0.045104  0.050295
-IDF Máximo   -0.009961  0.006036
-SCQ Promedio  0.186258  0.190251
-SCQ Máximo    0.259589  0.266277
-WIG           0.305542  0.268612
-NQC           0.400721  0.373052
-Clarity       0.289016  0.315306
-UEF-WIG       0.252688  0.225714
-UEF-NQC       0.424453  0.388327
-UEF-Clarity   0.302684  0.316423
+IDF Promedio  0.038146  0.019249
+IDF Máximo    0.027812  0.016803
+SCQ Promedio  0.179796  0.215337
+SCQ Máximo    0.268664  0.268887
+WIG           0.305418  0.268488
+NQC           0.381958  0.382614
+Clarity       0.272242  0.290966
+UEF-WIG       0.251694  0.225217
+UEF-NQC       0.426814  0.410183
+UEF-Clarity    0.28591  0.298044
 
 Estadísticas Resumen:
 Mejor método QPP: UEF-NQC

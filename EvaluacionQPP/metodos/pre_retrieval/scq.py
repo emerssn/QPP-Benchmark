@@ -19,15 +19,9 @@ class SCQ(PreRetrievalMethod):
             self.index = index
             self.total_docs = index.getCollectionStatistics().getNumberOfDocuments()
             self.total_terms = index.getCollectionStatistics().getNumberOfTokens()
+            # Avoid iterating the full lexicon; populate on-demand
             self.term_df = {}
             self.term_cf = {}
-            # Build term statistics from lexicon
-            lexicon = index.getLexicon()
-            for entry in lexicon:
-                term = entry.getKey()
-                stats = entry.getValue()
-                self.term_df[term] = stats.getDocumentFrequency()
-                self.term_cf[term] = stats.getFrequency()
 
     def _get_term_stats(self, term):
         """Get document frequency and collection frequency for a term."""
@@ -36,17 +30,27 @@ class SCQ(PreRetrievalMethod):
             return self.term_df[term], self.term_cf[term]
         
         # If we have an index builder, try its statistics
-        if self.index_builder and term in self.index_builder.term_df:
-            return (self.index_builder.term_df[term], 
-                   self.index_builder.term_cf[term])
+        if self.index_builder:
+            has_df = term in getattr(self.index_builder, 'term_df', {})
+            has_cf = term in getattr(self.index_builder, 'term_cf', {})
+            if has_df and has_cf:
+                return (self.index_builder.term_df[term],
+                        self.index_builder.term_cf[term])
         
         # Fallback to lexicon lookup
         lexicon = self.index.getLexicon()
         lex_entry = lexicon.getLexiconEntry(term)
         if lex_entry is not None:
-            stats = lex_entry.getValue()
-            df = stats.getDocumentFrequency()
-            cf = stats.getFrequency()
+            # Handle both LexiconEntry and Map.Entry wrappers
+            if hasattr(lex_entry, 'getDocumentFrequency') and hasattr(lex_entry, 'getFrequency'):
+                df = lex_entry.getDocumentFrequency()
+                cf = lex_entry.getFrequency()
+            elif hasattr(lex_entry, 'getValue'):
+                val = lex_entry.getValue()
+                df = val.getDocumentFrequency() if hasattr(val, 'getDocumentFrequency') else 0
+                cf = val.getFrequency() if hasattr(val, 'getFrequency') else 0
+            else:
+                df, cf = 0, 0
             # Cache the results
             self.term_df[term] = df
             self.term_cf[term] = cf

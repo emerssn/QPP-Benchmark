@@ -4,6 +4,9 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 import os
+import re
+import time
+import json
 from typing import Dict, Optional
 from ..utils.file_utils import ensure_dir
 
@@ -13,9 +16,10 @@ class RetrievalMetricsVisualizer:
     Generates boxplots, histograms, mean metric bars, and scatter plots.
     """
     
-    def __init__(self, eval_results: Dict, output_dir: Optional[str] = None):
+    def __init__(self, eval_results: Dict, output_dir: Optional[str] = None, dataset_name: str = "unknown"):
         self.eval_results = eval_results
         self.output_dir = output_dir
+        self.dataset_name = dataset_name
         self.metrics_df = self._prepare_metrics_df()
         
     def _prepare_metrics_df(self) -> pd.DataFrame:
@@ -31,6 +35,7 @@ class RetrievalMetricsVisualizer:
             k = metric.split('@')[1]
             return f'nDCG@{k}'
         elif metric == 'ap':
+            # Español: AP = Average Precision por consulta (según ir_measures / MAP alias).
             return 'AP'
         elif metric.startswith('p@'):
             k = metric.split('@')[1]
@@ -42,15 +47,50 @@ class RetrievalMetricsVisualizer:
             return metric
     
     def _save_plot(self, filename: str):
-        """Helper to save plots consistently."""
+        """Helper to save plots consistently.
+
+        Español: Asegura el directorio, sanea el nombre del archivo y reintenta
+        una vez si ocurre un error transitorio al escribir (p. ej., Windows).
+        """
         if self.output_dir:
             ensure_dir(self.output_dir)
-            path = os.path.join(self.output_dir, filename)
-            plt.savefig(f'{path}.png', dpi=300, bbox_inches='tight')
-            plt.savefig(f'{path}.pdf', bbox_inches='tight')
-            plt.close()
+            safe_base = self._sanitize_filename(filename)
+            path = os.path.normpath(os.path.join(self.output_dir, safe_base))
+
+            def _attempt_save():
+                plt.savefig(f'{path}.png', dpi=300, bbox_inches='tight')
+                plt.savefig(f'{path}.pdf', bbox_inches='tight')
+
+            try:
+                _attempt_save()
+            except OSError as e:
+                # Reintento ligero por posibles bloqueos/latencias del FS en Windows
+                time.sleep(0.25)
+                _attempt_save()
+            finally:
+                plt.close()
         else:
             plt.show()
+
+    def _sanitize_filename(self, name: str) -> str:
+        """Sanea nombres de archivo para Windows/Linux.
+
+        Español: Reemplaza caracteres inválidos y espacios finales, y evita nombres
+        reservados.
+        """
+        # Reemplazar caracteres inválidos en Windows: <>:"/\|?*
+        name = re.sub(r'[<>:"/\\|?*]+', '_', name)
+        # Quitar puntos/espacios finales que Windows no permite
+        name = name.rstrip(' .')
+        # Evitar nombres reservados (CON, PRN, AUX, NUL, COM1.., LPT1..)
+        reserved = {
+            'CON','PRN','AUX','NUL','COM1','COM2','COM3','COM4','COM5','COM6','COM7','COM8','COM9',
+            'LPT1','LPT2','LPT3','LPT4','LPT5','LPT6','LPT7','LPT8','LPT9'
+        }
+        base = os.path.basename(name)
+        if base.upper() in reserved:
+            name = f"_{name}"
+        return name
     
     def plot_metric_distributions(self, save: bool = True):
         """Generate boxplots and histograms showing metric distributions."""
@@ -63,6 +103,8 @@ class RetrievalMetricsVisualizer:
         plt.xticks(rotation=45)
         if save:
             self._save_plot('boxplot_metricas')
+            # Export JSON metadata for boxplot
+            self._export_boxplot_metadata()
         else:
             plt.show()
         
@@ -94,8 +136,15 @@ class RetrievalMetricsVisualizer:
 
     def plot_mean_metrics(self, save: bool = True):
         """Bar plot showing mean values for each metric."""
-        means = {self._format_metric_name(metric): data['mean'] 
-                for metric, data in self.eval_results.items()}
+        # Español: Para la media de AP se suele hablar de MAP (Mean Average Precision),
+        # por lo que etiquetamos explícitamente esa barra como MAP.
+        means = {}
+        for metric, data in self.eval_results.items():
+            if metric == 'ap':
+                label = 'MAP'
+            else:
+                label = self._format_metric_name(metric)
+            means[label] = data['mean']
         metrics = list(means.keys())
         values = list(means.values())
         
@@ -106,6 +155,8 @@ class RetrievalMetricsVisualizer:
         plt.xticks(rotation=45)
         if save:
             self._save_plot('media_metricas')
+            # Export JSON metadata for mean metrics
+            self._export_mean_metrics_metadata(means)
         else:
             plt.show()
 
@@ -142,3 +193,47 @@ class RetrievalMetricsVisualizer:
         self.plot_metric_distributions(save)
         self.plot_mean_metrics(save)
         self.plot_metric_relationships(save)
+
+    def _export_boxplot_metadata(self):
+        """Export JSON metadata for boxplot visualization."""
+        if not self.output_dir:
+            return
+        
+        metadata = {
+            "dataset": self.dataset_name,
+            "plot_type": "boxplot_metricas",
+            "metrics": {}
+        }
+        
+        for metric in self.metrics_df.columns:
+            values = self.metrics_df[metric].dropna()
+            formatted_name = self._format_metric_name(metric)
+            metadata["metrics"][formatted_name] = {
+                "count": int(len(values)),
+                "mean": float(values.mean()),
+                "std": float(values.std()),
+                "min": float(values.min()),
+                "q1": float(values.quantile(0.25)),
+                "median": float(values.median()),
+                "q3": float(values.quantile(0.75)),
+                "max": float(values.max()),
+            }
+        
+        output_path = os.path.join(self.output_dir, "boxplot_metricas.json")
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+    def _export_mean_metrics_metadata(self, means: Dict[str, float]):
+        """Export JSON metadata for mean metrics visualization."""
+        if not self.output_dir:
+            return
+        
+        metadata = {
+            "dataset": self.dataset_name,
+            "plot_type": "media_metricas",
+            "mean_values": {k: float(v) for k, v in means.items()}
+        }
+        
+        output_path = os.path.join(self.output_dir, "media_metricas.json")
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)

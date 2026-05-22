@@ -135,7 +135,8 @@ def perform_rm3_retrieval(
             return res
         rm3_pipe = rm3_pipe >> add_text
     else:
-        rm3_pipe = rm3_pipe >> pt.text.get_text(dataset, "text")
+        # Fetch text from index meta to avoid building/loading dataset docstore
+        rm3_pipe = rm3_pipe >> pt.text.get_text(index, "text")
     
     results = rm3_pipe.transform(queries_df)
     
@@ -241,9 +242,8 @@ def get_batch_scores(
         # For IquiqueDataset, directly map docno to text
         results['text'] = results['docno'].map(dataset.documents)
     else:
-        # Use PyTerrier's text getter for other datasets
-        text_getter = pt.text.get_text(dataset, "text")
-        results = text_getter.transform(results)
+        # Fetch text from index meta to avoid heavy dataset docstore at retrieval time
+        results = pt.text.get_text(index, "text").transform(results)
     
     # Verify text field is present
     if 'text' not in results.columns:

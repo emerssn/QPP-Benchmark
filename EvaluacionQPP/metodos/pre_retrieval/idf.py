@@ -16,39 +16,43 @@ class IDF(PreRetrievalMethod):
             self.index_builder = None
             self.index = index
             self.total_docs = index.getCollectionStatistics().getNumberOfDocuments()
+            # Avoid iterating the entire lexicon on large corpora; fetch on-demand
             self.term_df = {}
-            # Build term_df from lexicon
-            lexicon = index.getLexicon()
-            for entry in lexicon:
-                term = entry.getKey()
-                stats = entry.getValue()
-                self.term_df[term] = stats.getDocumentFrequency()
 
     def compute_score(self, query_terms, method='avg', **kwargs):
         """
-        Compute IDF score for a query.
-        
+        Compute IDF score for a query with improved OOV handling.
+
         Args:
             query_terms (list): List of preprocessed query terms
             method (str): Aggregation method ('avg' or 'max')
-            
+
         Returns:
             float: IDF score
         """
         if not query_terms:
             return 0.0
-            
+
         idfs = []
         for term in query_terms:
             df = self._get_term_df(term)
-            # Apply add-1 smoothing to avoid division by zero
+
+            # Handle OOV terms (df == -1)
+            if df == -1:
+                if method == 'max':
+                    # For max method, treat OOV as idf=0 (or skip entirely)
+                    continue  # Skip OOV terms in max calculation
+                else:  # 'avg' method
+                    continue  # Skip OOV terms in average calculation
+
+            # Apply add-1 smoothing to avoid division by zero for in-vocabulary terms
             df += 1
-            idf = np.log((self.total_docs + 1) / df)  # Laplace smoothing
+            idf = np.log((self.total_docs + 1) / df) 
             idfs.append(idf)
-        
+
         if not idfs:
             return 0.0
-            
+
         if method == 'max':
             return max(0.0, max(idfs))
         elif method == 'avg':
@@ -57,24 +61,36 @@ class IDF(PreRetrievalMethod):
             raise ValueError("Invalid method. Choose 'max' or 'avg'.")
 
     def _get_term_df(self, term):
-        """Get document frequency for a term."""
+        """Get document frequency for a term.
+
+        Returns:
+            int: Document frequency if term exists, -1 if OOV (out of vocabulary)
+        """
         # First try our tracked statistics
         if term in self.term_df:
             return self.term_df[term]
-        
+
         # If we have an index builder, try its statistics
         if self.index_builder and term in self.index_builder.term_df:
             return self.index_builder.term_df[term]
-        
+
         # Fallback to lexicon lookup
         lexicon = self.index.getLexicon()
         lex_entry = lexicon.getLexiconEntry(term)
         if lex_entry is not None:
-            df = lex_entry.getValue().getDocumentFrequency()
+            # PyTerrier/Terrier API compatibility: entry may be LexiconEntry or Map.Entry
+            if hasattr(lex_entry, 'getDocumentFrequency'):
+                df = lex_entry.getDocumentFrequency()
+            elif hasattr(lex_entry, 'getValue') and hasattr(lex_entry.getValue(), 'getDocumentFrequency'):
+                df = lex_entry.getValue().getDocumentFrequency()
+            else:
+                df = 0
             # Cache the result
             self.term_df[term] = df
             return df
-        return 0
+
+        # Return -1 for OOV terms (instead of 0) to distinguish from terms with df=0
+        return -1
 
     def compute_scores_batch(self, queries_dict=None, method='avg'):
         """

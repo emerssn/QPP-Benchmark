@@ -27,8 +27,11 @@ class TestNQC(unittest.TestCase):
         cls.test_index_path = os.path.join(script_dir, "..", "..", "..", "indices", "test_index")
         
         # Clean up any existing index
-        if os.path.exists(cls.test_index_path):
-            shutil.rmtree(cls.test_index_path)
+        try:
+            if os.path.exists(cls.test_index_path):
+                shutil.rmtree(cls.test_index_path)
+        except PermissionError:
+            pass
         
         # Ensure the directory exists
         os.makedirs(os.path.dirname(cls.test_index_path), exist_ok=True)
@@ -43,13 +46,17 @@ class TestNQC(unittest.TestCase):
             {"qid": "2", "query": "museo historia iquique"}
         ])
         
-        # Perform retrieval to get results
-        cls.retrieval_results = perform_retrieval(
-            cls.index,
-            cls.queries_df,
-            cls.dataset_processor.dataset,
-            method='BM25'
-        )
+        
+        # Create mock retrieval results
+        cls.retrieval_results = pd.DataFrame([
+            {"qid": "0", "docno": "doc2", "docScore": 5.2, "rank": 0},
+            {"qid": "0", "docno": "doc0", "docScore": 4.8, "rank": 1},
+            {"qid": "0", "docno": "doc1", "docScore": 4.1, "rank": 2},
+            {"qid": "1", "docno": "doc1", "docScore": 6.1, "rank": 0},
+            {"qid": "1", "docno": "doc0", "docScore": 5.3, "rank": 1},
+            {"qid": "2", "docno": "doc3", "docScore": 5.8, "rank": 0},
+            {"qid": "2", "docno": "doc0", "docScore": 5.1, "rank": 1},
+        ])
         
         # Create NQC instance
         cls.nqc = NQC(cls.index_builder, cls.retrieval_results)
@@ -63,8 +70,11 @@ class TestNQC(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         """Clean up after all tests"""
-        if os.path.exists(cls.test_index_path):
-            shutil.rmtree(cls.test_index_path)
+        try:
+            if os.path.exists(cls.test_index_path):
+                shutil.rmtree(cls.test_index_path)
+        except PermissionError:
+            pass
 
     def test_init_scores_vec(self):
         """Test initialization of scores vector"""

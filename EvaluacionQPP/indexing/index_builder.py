@@ -21,10 +21,14 @@ class IndexBuilder:
         if not pt.started():
             pt.init()
 
-        # Basic indexer configuration
-        indexer = pt.IterDictIndexer(base_index_path)
-        indexer.setProperty("terrier.index.meta.forward.keys", "docno,text")
-        indexer.setProperty("terrier.index.meta.forward.keylens", "20,100000")
+        # Basic indexer configuration (store docno and text in forward meta)
+        indexer = pt.IterDictIndexer(
+            base_index_path,
+            meta={
+                "docno": 64,
+                "text": 100000
+            }
+        )
         
         # Track term frequencies during indexing
         term_stats = {}
@@ -65,6 +69,11 @@ class IndexBuilder:
         self.term_df = {term: stats['df'] for term, stats in term_stats.items()}
         self.term_cf = {term: stats['cf'] for term, stats in term_stats.items()}
         self.total_terms = sum(self.term_cf.values())
+        # Persist lightweight stats to avoid re-iterating the dataset when loading an existing index
+        try:
+            self._save_index_stats(base_index_path)
+        except Exception as e:
+            print(f"Warning: could not persist index stats: {e}")
         
         print("\n=== Index Build Statistics ===")
         print(f"Total documents indexed: {self.total_docs}")
@@ -128,9 +137,20 @@ class IndexBuilder:
                 index = pt.IndexFactory.of(indexref)
                 self.index = index
                 
-                # Load statistics from index only if we don't have our own
-                if not self.term_df or not self.term_cf:
-                    self._load_statistics_from_index()
+                # Load lightweight stats from disk or fall back to Terrier collection stats.
+                # Avoid iterating the dataset to prevent re-downloading large corpora.
+                loaded_stats = False
+                try:
+                    loaded_stats = self._load_index_stats(base_index_path)
+                except Exception as e:
+                    print(f"Warning: could not load persisted stats: {e}")
+                
+                # If term_cf is empty (either not loaded or stats file was incomplete),
+                # populate from the Terrier lexicon
+                if not loaded_stats or not self.term_cf:
+                    if loaded_stats and not self.term_cf:
+                        print("Stats loaded but term_cf is empty, loading from lexicon...")
+                    self._populate_stats_from_collection()
                     
                 print(f"Successfully loaded existing index for {self.dataset_name}")
                 print(f"Total documents: {self.total_docs}")
@@ -151,6 +171,84 @@ class IndexBuilder:
         
         print(f"Term_df entries (sample): {list(self.term_df.items())[:5]}")  # Log term_df sample
         return index
+
+    def _stats_file_path(self, base_index_path):
+        return os.path.join(base_index_path, "index_stats.json")
+
+    def _save_index_stats(self, base_index_path, max_terms_to_store=0):
+        """
+        Save lightweight index stats to disk. For large collections, only totals are stored.
+        """
+        stats = {
+            "dataset": self.dataset_name,
+            "total_docs": self.total_docs,
+            "total_terms": int(self.total_terms),
+            "unique_terms": len(self.term_df),
+        }
+        # Optionally store a small slice of term stats if requested
+        if max_terms_to_store > 0 and self.term_cf:
+            sample_terms = list(self.term_cf.keys())[:max_terms_to_store]
+            stats["term_cf"] = {t: int(self.term_cf[t]) for t in sample_terms}
+            stats["term_df"] = {t: int(self.term_df.get(t, 0)) for t in sample_terms}
+        with open(self._stats_file_path(base_index_path), "w", encoding="utf-8") as f:
+            json.dump(stats, f)
+
+    def _load_index_stats(self, base_index_path):
+        """
+        Load persisted index stats if available. Returns True if loaded.
+        """
+        path = self._stats_file_path(base_index_path)
+        if not os.path.exists(path):
+            return False
+        with open(path, "r", encoding="utf-8") as f:
+            stats = json.load(f)
+        self.total_docs = int(stats.get("total_docs", 0))
+        self.total_terms = int(stats.get("total_terms", 0))
+        self.term_cf = stats.get("term_cf", {}) or {}
+        self.term_df = stats.get("term_df", {}) or {}
+        return True
+
+    def _populate_stats_from_collection(self):
+        """
+        Populate stats from Terrier collection statistics and lexicon (no dataset iteration).
+        """
+        try:
+            cs = self.index.getCollectionStatistics()
+            # Try common attribute names across Terrier versions
+            for getter in ("getNumberOfTokens", "getNumberOfTokensInCollection"):
+                if hasattr(cs, getter):
+                    self.total_terms = int(getattr(cs, getter)())
+                    break
+            # Also populate number of documents
+            if hasattr(cs, "getNumberOfDocuments"):
+                self.total_docs = int(cs.getNumberOfDocuments())
+            elif hasattr(cs, "getNumberOfDocumentsInCollection"):
+                self.total_docs = int(cs.getNumberOfDocumentsInCollection())
+        except Exception as e:
+            print(f"Warning: could not read Terrier collection statistics: {e}")
+        
+        # Populate term_cf and term_df from the Terrier lexicon
+        # This avoids re-iterating the dataset for large corpora
+        try:
+            lexicon = self.index.getLexicon()
+            print(f"Loading term frequencies from Terrier lexicon...")
+            term_cf = {}
+            term_df = {}
+            count = 0
+            for entry in lexicon:
+                term = entry.getKey()
+                # getFrequency() returns collection frequency (cf)
+                # getDocumentFrequency() returns document frequency (df)
+                term_cf[term] = int(entry.getValue().getFrequency())
+                term_df[term] = int(entry.getValue().getDocumentFrequency())
+                count += 1
+                if count % 50000 == 0:
+                    print(f"  Loaded {count} terms...")
+            self.term_cf = term_cf
+            self.term_df = term_df
+            print(f"Loaded {len(self.term_cf)} terms from lexicon")
+        except Exception as e:
+            print(f"Warning: could not read term frequencies from lexicon: {e}")
 
     def get_document_terms(self, doc_id):
         """
