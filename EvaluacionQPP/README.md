@@ -45,7 +45,7 @@ Todos los comandos se ejecutan desde el directorio `EvaluacionQPP/` (donde está
 ```
 python main.py --datasets cranfield
 ```
-Reemplazar `cranfield` por cualquiera disponible en `utils/config.py` (`AVAILABLE_DATASETS`): `antique_test`, `iquique_small`, `cranfield`, `fiqa`, `car`, `msmarco_v2_judged`, `trec_covid`, `msmarco_dl20_judged`, `car_v15_train_fold0`, `car_v15_trec_y1_manual`.
+Reemplazar `cranfield` por cualquiera disponible en `utils/config.py` (`AVAILABLE_DATASETS`): `antique_test`, `iquique_small`, `cranfield`, `trec_covid`, `msmarco_dl20_judged`, `car_v15_trec_y1_manual`.
 
 ### Ejecutar evaluación sobre todos los datasets
 ```
