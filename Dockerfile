@@ -19,20 +19,20 @@ RUN apt-get update && \
 # Set the working directory
 WORKDIR /app
 
-# Copy the entire project
-COPY . /app
+# Copy only the EvaluacionQPP package contents (flat layout for paper submission)
+COPY EvaluacionQPP/ /app/
 
 # Install Python dependencies
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r EvaluacionQPP/requirements.txt
+    pip install --no-cache-dir -r requirements.txt
 
 # Pre-download NLTK corpora used by main.py
 ENV NLTK_DATA=/usr/share/nltk_data
 RUN python -m nltk.downloader -d /usr/share/nltk_data punkt punkt_tab stopwords
 
-# Default command that matches your usage
-CMD ["python", "-X", "utf8", "-m", "EvaluacionQPP.main", \
-     "--datasets", "antique_test", \
+# Default command runs main.py directly from inside the package dir
+CMD ["python", "-X", "utf8", "main.py", \
+     "--datasets", "cranfield", \
      "--num-results", "1000", \
      "--correlations", "kendall", \
      "--use-uef"]

@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from ..utils.config import DATASET_FORMATS
-from ..utils.file_utils import ensure_dir
+from utils.config import DATASET_FORMATS
+from utils.file_utils import ensure_dir
 
 
 # Estilo global consistente con el resto de los módulos de evaluación

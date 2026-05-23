@@ -1,5 +1,5 @@
 import pyterrier as pt
-from ..utils.text_processing import preprocess_text
+from utils.text_processing import preprocess_text
 import json
 import os
 import shutil

@@ -7,7 +7,7 @@ from .post_retrieval.wig import WIG
 from .post_retrieval.nqc import NQC
 from .post_retrieval.clarity import Clarity
 from .post_retrieval.uef import UEF
-from ..utils.text_processing import preprocess_text
+from utils.text_processing import preprocess_text
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

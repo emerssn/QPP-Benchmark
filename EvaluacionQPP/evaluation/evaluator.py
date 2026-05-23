@@ -4,11 +4,11 @@ from typing import Dict, Union, Iterable, Optional
 import os
 import ir_measures
 from ir_measures import nDCG, P, AP, RR, Judged
-from ..utils.file_utils import ensure_dir
+from utils.file_utils import ensure_dir
 import logging
-from ..utils.config import DATASET_FORMATS
+from utils.config import DATASET_FORMATS
 import json
-from EvaluacionQPP.evaluation.evaluator_viz import RetrievalMetricsVisualizer
+from evaluation.evaluator_viz import RetrievalMetricsVisualizer
 
 
 

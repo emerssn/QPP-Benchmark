@@ -6,7 +6,7 @@ import seaborn as sns
 from typing import Dict, List, Union, Optional
 import logging
 import os
-from ..utils.file_utils import ensure_dir
+from utils.file_utils import ensure_dir
 
 # Configuración estética global
 sns.set_style("whitegrid")

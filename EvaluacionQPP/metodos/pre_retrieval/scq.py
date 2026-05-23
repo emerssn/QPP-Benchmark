@@ -1,4 +1,4 @@
-from ..base import PreRetrievalMethod
+from metodos.base import PreRetrievalMethod
 import numpy as np
 import json
 

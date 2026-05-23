@@ -35,9 +35,23 @@ Este proyecto implementa y evalúa diferentes métodos de Predicción de Rendimi
    - Unix/MacOS: source qppenv/bin/activate
 5. Instalar dependencias: pip install -r requirements.txt
 
+## Datasets
+La mayoría de los datasets provienen de [ir-datasets](https://ir-datasets.com/) (identificadores con prefijo `irds:` en `utils/config.py`) y se descargan automáticamente en la primera ejecución vía PyTerrier/ir_datasets. La descarga puede tardar dependiendo del tamaño del corpus (ej. TREC-COVID, MSMARCO v2 son grandes). El dataset `iquique_small` es local al proyecto.
+
 ## Uso
-Ejecutar evaluación completa:
-python -m EvaluacionQPP.main --datasets antique_test iquique_small
+Todos los comandos se ejecutan desde el directorio `EvaluacionQPP/` (donde está `main.py`).
+
+### Ejecutar evaluación sobre un dataset específico
+```
+python main.py --datasets cranfield
+```
+Reemplazar `cranfield` por cualquiera disponible en `utils/config.py` (`AVAILABLE_DATASETS`): `antique_test`, `iquique_small`, `cranfield`, `fiqa`, `car`, `msmarco_v2_judged`, `trec_covid`, `msmarco_dl20_judged`, `car_v15_train_fold0`, `car_v15_trec_y1_manual`.
+
+### Ejecutar evaluación sobre todos los datasets
+```
+python main.py
+```
+Omitir `--datasets` procesa todos los datasets definidos en `AVAILABLE_DATASETS`.
 
 ### Opciones principales:
 | Opción | Descripción |
@@ -50,11 +64,6 @@ python -m EvaluacionQPP.main --datasets antique_test iquique_small
 | `--output-dir` | Directorio para guardar resultados |
 | `--use-uef` | Incluir método UEF en evaluación |
 | `--skip-plots` | Omitir generación de gráficos |
-
-## Docker
-También se puede ejecutar usando Docker:
-1. Construir imagen: docker build -t qpp-eval .
-2. Ejecutar contenedor: docker run qpp-eval
 
 ## Estructura del Proyecto
 /EvaluacionQPP

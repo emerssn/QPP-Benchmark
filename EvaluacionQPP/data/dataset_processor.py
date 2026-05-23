@@ -1,8 +1,8 @@
 import pyterrier as pt
 import pandas as pd
 from .iquique_dataset import IquiqueDataset
-from EvaluacionQPP.utils.config import AVAILABLE_DATASETS, DATASET_FORMATS
-from EvaluacionQPP.utils.text_processing import preprocess_text
+from utils.config import AVAILABLE_DATASETS, DATASET_FORMATS
+from utils.text_processing import preprocess_text
 import warnings
 
 class DatasetProcessor:

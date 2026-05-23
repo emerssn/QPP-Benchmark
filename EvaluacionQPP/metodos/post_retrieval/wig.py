@@ -1,4 +1,4 @@
-from ..base import PostRetrievalMethod
+from metodos.base import PostRetrievalMethod
 
 import numpy as np
 import json

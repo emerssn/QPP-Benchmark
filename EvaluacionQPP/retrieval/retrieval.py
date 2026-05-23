@@ -1,14 +1,14 @@
 import pyterrier as pt
 import pandas as pd
-from EvaluacionQPP.data.dataset_processor import DatasetProcessor
-from EvaluacionQPP.indexing.index_builder import IndexBuilder
-from EvaluacionQPP.metodos.pre_retrieval.idf import IDF
-from EvaluacionQPP.metodos.post_retrieval.nqc import NQC  # Ensure NQC is properly imported
+from data.dataset_processor import DatasetProcessor
+from indexing.index_builder import IndexBuilder
+from metodos.pre_retrieval.idf import IDF
+from metodos.post_retrieval.nqc import NQC  # Ensure NQC is properly imported
 import os
 import shutil
 from typing import Union, Dict
-from EvaluacionQPP.data.iquique_dataset import IquiqueDataset
-from EvaluacionQPP.utils.config import DATASET_FORMATS
+from data.iquique_dataset import IquiqueDataset
+from utils.config import DATASET_FORMATS
 import logging
 
 def get_dataset_config(dataset):

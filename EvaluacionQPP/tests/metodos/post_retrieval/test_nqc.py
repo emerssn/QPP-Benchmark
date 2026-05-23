@@ -4,11 +4,11 @@ import os
 import shutil
 import pyterrier as pt
 import pandas as pd
-from EvaluacionQPP.metodos.post_retrieval.nqc import NQC
-from EvaluacionQPP.data.dataset_processor import DatasetProcessor
-from EvaluacionQPP.indexing.index_builder import IndexBuilder
-from EvaluacionQPP.utils.text_processing import preprocess_text
-from EvaluacionQPP.retrieval.retrieval import perform_retrieval
+from metodos.post_retrieval.nqc import NQC
+from data.dataset_processor import DatasetProcessor
+from indexing.index_builder import IndexBuilder
+from utils.text_processing import preprocess_text
+from retrieval.retrieval import perform_retrieval
 
 class TestNQC(unittest.TestCase):
     @classmethod

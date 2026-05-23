@@ -6,14 +6,14 @@ import pyterrier as pt
 import pandas as pd 
 import logging
 
-from EvaluacionQPP.data.dataset_processor import DatasetProcessor
-from EvaluacionQPP.indexing.index_builder import IndexBuilder
-from EvaluacionQPP.evaluation.qrels_difficulty_analyzer import QrelsDifficultyAnalyzer
-from EvaluacionQPP.metodos.qpp_factory import QPPMethodFactory
-from EvaluacionQPP.retrieval.retrieval import get_batch_scores
-from EvaluacionQPP.evaluation.evaluator import evaluate_results
-from EvaluacionQPP.evaluation.correlation_analyzer import QPPCorrelationAnalyzer
-from EvaluacionQPP.utils.config import AVAILABLE_DATASETS
+from data.dataset_processor import DatasetProcessor
+from indexing.index_builder import IndexBuilder
+from evaluation.qrels_difficulty_analyzer import QrelsDifficultyAnalyzer
+from metodos.qpp_factory import QPPMethodFactory
+from retrieval.retrieval import get_batch_scores
+from evaluation.evaluator import evaluate_results
+from evaluation.correlation_analyzer import QPPCorrelationAnalyzer
+from utils.config import AVAILABLE_DATASETS
 
 nltk.download('punkt')
 nltk.download('stopwords')

@@ -3,8 +3,8 @@ import pandas as pd
 import numpy as np
 import os
 import tempfile
-from EvaluacionQPP.evaluation.correlation_analyzer import QPPCorrelationAnalyzer
-from EvaluacionQPP.data.iquique_dataset import IquiqueDataset
+from evaluation.correlation_analyzer import QPPCorrelationAnalyzer
+from data.iquique_dataset import IquiqueDataset
 
 class TestQPPCorrelationAnalyzer(unittest.TestCase):
     @classmethod

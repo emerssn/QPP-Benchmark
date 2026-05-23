@@ -3,7 +3,7 @@ import os
 import json
 from datetime import datetime
 from functools import partial
-from EvaluacionQPP.utils.test_stats_collector import StatsTestResult, TestStatsCollector
+from utils.test_stats_collector import StatsTestResult, TestStatsCollector
 import sys
 
 def generate_markdown_report(stats, output_file):

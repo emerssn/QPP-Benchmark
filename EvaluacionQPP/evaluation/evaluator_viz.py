@@ -8,7 +8,7 @@ import re
 import time
 import json
 from typing import Dict, Optional
-from ..utils.file_utils import ensure_dir
+from utils.file_utils import ensure_dir
 
 class RetrievalMetricsVisualizer:
     """

@@ -2,9 +2,9 @@ import numpy as np
 import pandas as pd
 from typing import Dict, Iterable
 from collections import defaultdict
-from EvaluacionQPP.indexing.index_builder import IndexBuilder
-from EvaluacionQPP.utils.text_processing import preprocess_text
-from ..base import PostRetrievalMethod
+from indexing.index_builder import IndexBuilder
+from utils.text_processing import preprocess_text
+from metodos.base import PostRetrievalMethod
 import logging
 import json
 

@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 from typing import Dict
-from ..base import PostRetrievalMethod
-from ...utils.config import DATASET_FORMATS
+from metodos.base import PostRetrievalMethod
+from utils.config import DATASET_FORMATS
 import logging
 
 

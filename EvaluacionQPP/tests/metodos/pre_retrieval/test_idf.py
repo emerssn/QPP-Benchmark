@@ -3,10 +3,10 @@ import numpy as np
 import os
 import shutil
 import pyterrier as pt
-from EvaluacionQPP.metodos.pre_retrieval.idf import IDF
-from EvaluacionQPP.data.dataset_processor import DatasetProcessor
-from EvaluacionQPP.indexing.index_builder import IndexBuilder
-from EvaluacionQPP.utils.text_processing import preprocess_text
+from metodos.pre_retrieval.idf import IDF
+from data.dataset_processor import DatasetProcessor
+from indexing.index_builder import IndexBuilder
+from utils.text_processing import preprocess_text
 
 class TestIDF(unittest.TestCase):
     @classmethod
